@@ -312,3 +312,28 @@ python bin/list_personas.py --json
 bin/clean_logs.sh --dry-run
 bin/clean_logs.sh --days 14
 ```
+
+## Backend (FastAPI) for callbacks
+Run a minimal FastAPI service to receive Tavus callbacks and route tool calls.
+
+Local run:
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env && ${EDITOR:-nano} .env   # set TAVUS_API_KEY; optional WEBHOOK_SHARED_SECRET
+
+# Start API on :8000
+uvicorn app.main:app --reload --port 8000
+
+# Set callback to your local API (use a tunnel for public reachability)
+export WEBHOOK_URL="http://localhost:8000/tavus/callback"
+```
+
+Security:
+- Set `WEBHOOK_SHARED_SECRET` and configure your proxy to inject it in `x-webhook-secret`, or leave empty for local dev.
+
+Handlers:
+- Built-in examples for `summarize_discussion`, `take_meeting_notes`, `cluster_ideas`. Add more via `@register_tool("name")` in `app/main.py`.
+
+Deploy:
+- Containerize with Uvicorn/Gunicorn and deploy (Cloud Run/Fly.io/Azure Container Apps). Route `/tavus/callback` and set as the conversation `callback_url`.
