@@ -1,0 +1,27 @@
+// Conversation template (JSON with comments). Copy to a .json file when ready to run.
+// Provide either persona_id (preferred) or replica_id. If both are blank, the tool will auto-pick a completed replica.
+{
+    // Identity: choose ONE (persona preferred)
+    "persona_id": "",
+    "replica_id": "",
+    // Name shown in Tavus dashboard and APIs
+    "conversation_name": "My Conversation",
+    // Either set an explicit context here (recommended)...
+    "conversational_context": "Set the scene here: who is the user, what is the objective, and any constraints.",
+    // ...or use the meeting helper flags in the CLI to auto-build context:
+    //    bin/tune.sh conversation \
+    //      --meeting-type Brainstorming --framework "Double Diamond" \
+    //      --duration 6 --participants 3 \
+    //      --topic "What is the single biggest travel challenge?" \
+    //      --comment "we need support for goal alignment"
+    // Optional greeting said when the user joins
+    "custom_greeting": "",
+    // Optional toggles and advanced fields
+    "audio_only": false,
+    "document_ids": [], // real document IDs from your account
+    "document_tags": [], // real document tags used by your documents
+    "document_retrieval_strategy": "balanced", // speed | quality | balanced
+    "memory_stores": [],
+    "test_mode": true, // set false to run a live session
+    "properties": {} // freeform object for advanced settings
+}

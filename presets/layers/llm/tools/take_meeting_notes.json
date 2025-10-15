@@ -1,0 +1,19 @@
+{
+    "type": "function",
+    "function": {
+        "name": "take_meeting_notes",
+        "description": "Captures and organizes key discussion points into structured notes.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "Spoken content to extract and organize notes from."
+                }
+            },
+            "required": [
+                "content"
+            ]
+        }
+    }
+}

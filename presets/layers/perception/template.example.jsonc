@@ -1,0 +1,41 @@
+// Perception layer JSONC template with comments
+// You can save as .json or .jsonc; the CLI strips comments.
+{
+    // Model to use for perception: "raven-0" (recommended), "basic", or "off"
+    "perception_model": "raven-0",
+    // Ambient awareness queries run passively during the session
+    "ambient_awareness_queries": [
+        "Is the user wearing a bright outfit?"
+    ],
+    // Analysis queries to run on-demand for deeper insights
+    "perception_analysis_queries": [
+        "Is the user wearing multiple bright colors?",
+        "Is there any indication that more than one person is present?",
+        "On a scale of 1-100, how often was the user looking at the screen?"
+    ],
+    // System prompt to steer how perception tools should be used
+    "perception_tool_prompt": "You have a tool to notify the system when a bright outfit is detected, named `notify_if_bright_outfit_shown`. You MUST use this tool when a bright outfit is detected.",
+    // Perception-specific function tools (invoked for perception insights)
+    "perception_tools": [
+        {
+            "type": "function",
+            "function": {
+                "name": "notify_if_bright_outfit_shown",
+                "description": "Use this function when a bright outfit is detected in the image with high confidence",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "outfit_color": {
+                            "type": "string",
+                            "description": "Best guess on what color of outfit it is"
+                        }
+                    },
+                    "required": [
+                        "outfit_color"
+                    ],
+                    "additionalProperties": false
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,1 @@
+2025-10-13: Removed legacy files (persona_run.py, conversation_run.py, bin/persona.sh, bin/conversation.sh, configs/*/default.json) to consolidate on tune.py and scenario scripts.

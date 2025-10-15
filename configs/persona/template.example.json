@@ -1,0 +1,15 @@
+{
+    "persona_name": "My Persona",
+    "system_prompt": "Describe the persona’s behavior here...",
+    "pipeline_mode": "full",
+    "context": "",
+    "default_replica_id": "r4317e64d25a",
+    "llm": "tavus_llama",
+    "tts": "cartesia_sonic",
+    "stt": "tavus_advanced",
+    "perception": "basic",
+    "document_ids": [],
+    "document_tags": [],
+    "objectives_id": "",
+    "guardrails_id": ""
+}

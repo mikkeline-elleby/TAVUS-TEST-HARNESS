@@ -1,0 +1,7 @@
+{
+    "stt_engine": "tavus-advanced",
+    "participant_pause_sensitivity": "high",
+    "participant_interrupt_sensitivity": "high",
+    "hotwords": "You are TeamWise a meeting facilitator.",
+    "smart_turn_detection": false
+}

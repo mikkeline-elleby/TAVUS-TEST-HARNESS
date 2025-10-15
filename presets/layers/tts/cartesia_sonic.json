@@ -1,0 +1,12 @@
+{
+    "tts_engine": "cartesia",
+    "voice_settings": {
+        "speed": "normal",
+        "emotion": [
+            "positivity:high",
+            "curiosity"
+        ]
+    },
+    "tts_emotion_control": false,
+    "tts_model_name": "sonic"
+}

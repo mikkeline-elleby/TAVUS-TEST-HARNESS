@@ -1,0 +1,36 @@
+// Persona template (JSON with comments). Copy to a .json file when ready to run.
+// Minimal required fields for pipeline_mode=full: persona_name, system_prompt.
+// You can inline `layers`, use a layers_file, or reference modular layers by name (llm/tts/stt/perception).
+{
+    // Display name of the persona in Tavus
+    "persona_name": "My Persona",
+    // Required when pipeline_mode is "full". Defines tone/behavior/guardrails to the LLM.
+    "system_prompt": "Describe the persona’s behavior here...",
+    // "full" (default) for end-to-end CVI; "echo" for drive-by audio (no LLM).
+    "pipeline_mode": "full",
+    // Default replica to use when creating conversations with this persona
+    "default_replica_id": "r4317e64d25a",
+    // Optional long-form background/context appended to the LLM
+    "context": "",
+    // Knowledge: per-persona documents (requires real IDs/tags from your Tavus account)
+    "document_ids": [],
+    "document_tags": [],
+    // Optional governance: create these in Tavus dashboard and paste IDs here
+    // Outcomes tracking
+    "objectives_id": "",
+    // Policy/guardrails
+    "guardrails_id": "",
+    // Modular layers example:
+    // layers_dir defaults to "presets/layers", so you can omit it:
+    // "llm": "tavus_llama",
+    // "tts": "cartesia_sonic",
+    // "stt": "tavus_advanced",
+    // "perception": "basic"
+    // Alternatively, inline full layers here:
+    // "layers": {
+    //   "llm": { "model": "tavus-gpt-4o" },
+    //   "tts": { "tts_engine": "cartesia", "tts_model_name": "sonic" },
+    //   "perception": { "perception_model": "raven-0" },
+    //   "stt": { "stt_engine": "tavus-advanced" }
+    // }
+}
