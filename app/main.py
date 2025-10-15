@@ -93,6 +93,17 @@ def handle_cluster(payload: TavusEvent) -> Dict[str, Any]:
     return {"clusters": clusters}
 
 
+@register_tool("print_message")
+def handle_print_message(payload: TavusEvent) -> Dict[str, Any]:
+    text = (
+        (payload.tool.arguments.get("text") if payload.tool else None)
+        or payload.data.get("text")
+        or ""
+    )
+    print(f"[Webhook] print_message: {text}")
+    return {"printed": True}
+
+
 def process_event(evt: TavusEvent) -> None:
     # Idempotency example: a real impl would use a DB keyed by event_id
     tool_name = evt.tool.name if evt.tool else evt.data.get("tool")
