@@ -198,6 +198,48 @@ bin/tune.sh persona \
   "perception": "basic"
 }
 ```
+
+### Objectives and Guardrails for a Meeting Facilitator
+
+Use a practical Objective and Guardrail aligned with facilitator tasks:
+
+- Objective: "Facilitator Core Objective" — by end of meeting, ensure:
+  - Agenda coverage and timeboxed discussion
+  - Inclusive participation (no one dominates)
+  - 1–3 decisions captured with owners
+  - Action items: owner, due date, and success metric
+
+- Guardrail: "Facilitator Safety Policy" — always:
+  - Avoid medical, legal, or financial advice
+  - Do not collect sensitive data (SSN, passport, payment)
+  - De-escalate unsafe or toxic content and offer to loop in a human
+  - Maintain professional, inclusive tone
+
+Attach them to your persona by ID:
+
+```bash
+bin/tune.sh persona \
+  --config configs/persona/facilitator.example.json \
+  --update \
+  --objectives-id ob_XXXXXXXX \
+  --guardrails-id gr_YYYYYYYY
+```
+
+Or by NAME (auto-resolve):
+
+```bash
+bin/tune.sh persona \
+  --config configs/persona/facilitator.example.json \
+  --update \
+  --objectives-name "Facilitator Core Objective" \
+  --guardrails-name "Facilitator Safety Policy"
+```
+
+Tip: a ready-to-run example is in `configs/persona/facilitator.with_policies.json` (uses the names above). Run:
+
+```bash
+bin/tune.sh persona --config configs/persona/facilitator.with_policies.json --update
+```
 Notes:
 - If you also provide a full `layers` object, modular layers will merge into it (LLM tools are appended).
 - If `--layers-preset` is used, you can still override individual modular layers by flags or config.
