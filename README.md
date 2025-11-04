@@ -107,7 +107,9 @@ There are two ways to get recordings into your S3 bucket. Use native Tavus recor
 }
 ```
 
-2) Create the conversation with recording enabled (uses your `configs/conversation/recording.s3.julie.json`):
+2) Create the conversation with recording enabled:
+
+- From a properties file (explicit):
 
 ```bash
 source .venv/bin/activate
@@ -117,6 +119,18 @@ python tune.py conversation \
 ```
 
 Or with curl (replace your API key if not in `.env`):
+Alternatively, drive from env (no file needed):
+
+```
+# In .env
+S3_RECORDING_ASSUME_ROLE_ARN=arn:aws:iam::268922422948:role/CVIRecordingRole
+S3_RECORDING_BUCKET_REGION=eu-north-1
+S3_RECORDING_BUCKET_NAME=tavus-recording
+
+# Then
+source .venv/bin/activate
+python tune.py conversation --replica-id rf4703150052 --use-s3-recording-from-env
+```
 
 ```bash
 curl --request POST \

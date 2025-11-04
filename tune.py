@@ -451,6 +451,32 @@ def cmd_conversation(args: argparse.Namespace) -> int:
             if not isinstance(props, dict):
                 sys.exit("properties file must be a JSON object (either the properties object or { \"properties\": { ... } })")
             payload["properties"] = props
+    elif getattr(args, "use_s3_recording_from_env", False):
+        # Build properties from environment variables for native Tavus S3 recording
+        arn = os.getenv("S3_RECORDING_ASSUME_ROLE_ARN") or os.getenv("AWS_ROLE_ARN") or ""
+        region = os.getenv("S3_RECORDING_BUCKET_REGION") or os.getenv("S3_REGION") or ""
+        bucket = (
+            os.getenv("S3_RECORDING_BUCKET_NAME")
+            or os.getenv("S3_BUCKET_NAME")
+            or os.getenv("S3_BUCKET")
+            or ""
+        )
+        missing = []
+        if not arn: missing.append("S3_RECORDING_ASSUME_ROLE_ARN")
+        if not region: missing.append("S3_RECORDING_BUCKET_REGION")
+        if not bucket: missing.append("S3_RECORDING_BUCKET_NAME")
+        if missing:
+            sys.exit(
+                "--use-s3-recording-from-env requires env vars: "
+                + ", ".join(missing)
+                + ". You can add them to .env."
+            )
+        payload["properties"] = {
+            "enable_recording": True,
+            "aws_assume_role_arn": arn,
+            "recording_s3_bucket_region": region,
+            "recording_s3_bucket_name": bucket,
+        }
 
     if args.print_payload:
         print(json.dumps(payload, indent=2))
@@ -515,6 +541,7 @@ def main():
     pc.add_argument("--document-retrieval-strategy", choices=["speed", "quality", "balanced"], default="balanced", help="Doc retrieval mode")
     pc.add_argument("--memory-stores", help="Comma-separated memory store names")
     pc.add_argument("--properties-file", help="Path to a JSON file for properties")
+    pc.add_argument("--use-s3-recording-from-env", action="store_true", help="Enable native Tavus S3 recording using env vars S3_RECORDING_ASSUME_ROLE_ARN, S3_RECORDING_BUCKET_REGION, S3_RECORDING_BUCKET_NAME")
     pc.add_argument("--print-payload", action="store_true", help="Print the request body then exit")
     pc.add_argument("--dry-run", action="store_true", help="Skip the API call")
     # Optional meeting param helpers to generate context if --context is not provided
