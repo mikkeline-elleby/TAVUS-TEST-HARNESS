@@ -2,12 +2,20 @@ from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from typing import Any, Dict, Optional, cast, List
+import re
 import os
 import time
 import uuid
 import json
 from datetime import datetime
+import urllib.request
+import tempfile
+import boto3
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from a local .env file (development convenience)
+load_dotenv()
 
 
 APP_SECRET = os.getenv("WEBHOOK_SHARED_SECRET", "")
@@ -75,6 +83,13 @@ def verify_secret(req: Request) -> None:
 
 
 handlers: Dict[str, Any] = {}
+# In-memory roster per conversation
+# ROSTER[conversation_id] = {
+#   "participants": { participant_id: display_name, ... },
+#   "last_speaker_id": str | None,
+#   "last_speaker_name": str | None,
+# }
+ROSTER: Dict[str, Dict[str, Any]] = {}
 
 
 def register_tool(name: str):
@@ -129,6 +144,116 @@ def handle_print_message(payload: TavusEvent) -> Dict[str, Any]:
     )
     print(f"[Webhook] print_message: {text}")
     return {"printed": True}
+
+
+def _speaker_label_from_msg(m: Dict[str, Any]) -> Optional[str]:
+    # Common keys seen across providers/schemas
+    for k in ("display_name", "displayName", "name", "speaker_name", "speakerName"):
+        v = m.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    # Nested speaker object cases
+    sp = m.get("speaker")
+    if isinstance(sp, dict):
+        for k in ("display_name", "displayName", "name"):
+            v = sp.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    # Sender/user nested objects
+    for container_key in ("sender", "user", "participant"):
+        c = m.get(container_key)
+        if isinstance(c, dict):
+            for k in ("display_name", "displayName", "name"):
+                v = c.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+    return None
+
+
+def _speaker_id_from_msg(m: Dict[str, Any]) -> Optional[str]:
+    # Common id-like keys
+    for k in ("participant_id", "speaker_id", "user_id", "id"):
+        v = m.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    # Nested objects
+    for container_key in ("participant", "speaker", "user", "sender"):
+        c = m.get(container_key)
+        if isinstance(c, dict):
+            for k in ("participant_id", "speaker_id", "user_id", "id"):
+                v = c.get(k)
+                if isinstance(v, str) and v.strip():
+                    return v.strip()
+    return None
+
+
+@register_tool("get_speaker_name")
+def handle_get_speaker_name(payload: TavusEvent) -> Dict[str, Any]:
+    """Return the latest human speaker name from transcript metadata if available.
+    Strategy:
+    - Look at properties.transcript (array of messages), scan from end
+    - Prefer messages with role "user" or "participant"; fall back to any last message
+    - Extract a display name via _speaker_label_from_msg
+    """
+    props = payload.properties or {}
+    transcript = props.get("transcript") if isinstance(props, dict) else None
+    name: Optional[str] = None
+    if isinstance(transcript, list) and transcript:
+        # Scan from last to first
+        for msg in reversed(transcript):
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role", "")).lower()
+            if role not in ("user", "participant", "speaker", "human"):
+                # Prefer human turns first
+                continue
+            name = _speaker_label_from_msg(msg)
+            if name:
+                break
+        # If nothing found on human roles, take the last message label if present
+        if not name:
+            for msg in reversed(transcript):
+                if not isinstance(msg, dict):
+                    continue
+                name = _speaker_label_from_msg(msg)
+                if name:
+                    break
+    return {"speaker_name": name or ""}
+
+
+@register_tool("get_current_speaker")
+def handle_get_current_speaker(payload: TavusEvent) -> Dict[str, Any]:
+    conv_id = payload.conversation_id or ""
+    # Prefer current payload message set
+    props = payload.properties or {}
+    transcript = props.get("transcript") if isinstance(props, dict) else None
+    current_name = None
+    current_id = None
+    if isinstance(transcript, list) and transcript:
+        for msg in reversed(transcript):
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role", "")).lower()
+            if role in ("user", "participant", "speaker", "human"):
+                current_name = _speaker_label_from_msg(msg)
+                current_id = _speaker_id_from_msg(msg)
+                break
+    # Fallback to roster memory
+    if (not current_name) and conv_id and conv_id in ROSTER:
+        entry = ROSTER[conv_id]
+        current_name = entry.get("last_speaker_name")
+        current_id = entry.get("last_speaker_id")
+    return {"participant_id": current_id or "", "display_name": current_name or ""}
+
+
+@register_tool("get_roster")
+def handle_get_roster(payload: TavusEvent) -> Dict[str, Any]:
+    conv_id = payload.conversation_id or ""
+    participants = []
+    if conv_id and conv_id in ROSTER:
+        for pid, name in ROSTER[conv_id].get("participants", {}).items():
+            participants.append({"participant_id": pid, "display_name": name})
+    return {"participants": participants}
 
 
 def process_event(evt: TavusEvent) -> None:
@@ -224,12 +349,135 @@ def _persist_webhook_payload(payload: Dict[str, Any]) -> None:
                 for msg in transcript:
                     if not isinstance(msg, dict):
                         continue
+                    # Prefer a human-friendly display name when available
+                    # Reuse the same label extraction as our tool
+                    def _name_from(m: Dict[str, Any]) -> Optional[str]:
+                        return _speaker_label_from_msg(m)
+
                     role = str(msg.get("role", ""))
                     content = str(msg.get("content", ""))
-                    if role or content:
-                        f.write(f"{role}: {content}\n")
+                    label = _name_from(msg)
+                    if not label:
+                        label = role or "speaker"
+                    if label or content:
+                        # Example: "Julie (user): Hello there"
+                        suffix = f" ({role})" if role and role.lower() not in label.lower() else ""
+                        f.write(f"{label}{suffix}: {content}\n")
     except Exception as e:
         print(f"[Webhook] Failed to persist payload: {e}")
+
+
+def _maybe_get_recording_url(payload: Dict[str, Any]) -> Optional[str]:
+    """Try to find a recording / video URL in common locations of the payload."""
+    # Direct top-level fields
+    for k in ("recording_url", "video_url", "media_url"):
+        v = payload.get(k)
+        if isinstance(v, str) and v.startswith("http"):
+            return v
+    data = payload.get("data") or {}
+    if isinstance(data, dict):
+        for k in ("recording_url", "video_url", "media_url"):
+            v = data.get(k)
+            if isinstance(v, str) and v.startswith("http"):
+                return v
+    props = payload.get("properties") or {}
+    if isinstance(props, dict):
+        for k in ("recording_url", "video_url", "media_url"):
+            v = props.get(k)
+            if isinstance(v, str) and v.startswith("http"):
+                return v
+    return None
+
+
+def _s3_client_from_env() -> Optional[Any]:
+    bucket = os.getenv("S3_BUCKET")
+    if not bucket:
+        return None
+    # boto3 will pick up AWS creds from env/profile/IMDS
+    try:
+        s3 = boto3.client("s3", region_name=os.getenv("AWS_REGION") or None)
+        return s3
+    except Exception as e:
+        print(f"[Webhook] boto3 S3 client error: {e}")
+        return None
+
+
+def _upload_recording_to_s3(conv_id: str, url: str) -> Optional[str]:
+    bucket = os.getenv("S3_BUCKET")
+    if not bucket:
+        print("[Webhook] S3_BUCKET not set; skip upload")
+        return None
+    prefix = os.getenv("S3_PREFIX", "recordings/").strip()
+    if prefix and not prefix.endswith("/"):
+        prefix += "/"
+    # Download to temp file first
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp_path = tmp.name
+        urllib.request.urlretrieve(url, tmp_path)
+    except Exception as e:
+        print(f"[Webhook] Failed to download recording: {e}")
+        return None
+    # Compute key and upload
+    name = url.split("/")[-1] or f"{uuid.uuid4()}.mp4"
+    key = f"{prefix}{conv_id}/{name}"
+    try:
+        s3 = _s3_client_from_env()
+        if not s3:
+            return None
+        s3.upload_file(tmp_path, bucket, key)
+        print(f"[Webhook] Uploaded recording to s3://{bucket}/{key}")
+        return f"s3://{bucket}/{key}"
+    except Exception as e:
+        print(f"[Webhook] S3 upload failed: {e}")
+        return None
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+
+def _update_roster_from_payload(payload: Dict[str, Any]) -> None:
+    conv_id = str(payload.get("conversation_id") or "")
+    if not conv_id:
+        return
+    entry = ROSTER.setdefault(conv_id, {"participants": {}, "last_speaker_id": None, "last_speaker_name": None})
+    props = payload.get("properties") or {}
+    # Update from transcript messages
+    transcript = props.get("transcript") if isinstance(props, dict) else None
+    if isinstance(transcript, list) and transcript:
+        # Track last human message
+        last_id = None
+        last_name = None
+        for msg in transcript:
+            if not isinstance(msg, dict):
+                continue
+            name = _speaker_label_from_msg(msg)
+            pid = _speaker_id_from_msg(msg)
+            if pid and name:
+                entry["participants"][pid] = name
+            role = str(msg.get("role", "")).lower()
+            if role in ("user", "participant", "speaker", "human"):
+                if name:
+                    last_name = name
+                # Heuristic: if platform doesn't send names, try to capture "my name is X" / "I'm X" / "I am X"
+                if not name:
+                    content = str(msg.get("content", ""))
+                    # Very conservative patterns to avoid false positives
+                    # Examples captured: "my name is Alex", "I'm Alex", "I am Alex"
+                    m = re.search(r"\bmy name is\s+([A-Z][a-zA-Z'-]{1,40})\b", content, flags=re.I)
+                    if not m:
+                        m = re.search(r"\bI\s*am\s+([A-Z][a-zA-Z'-]{1,40})\b", content)
+                    if not m:
+                        m = re.search(r"\bI\s*'\s*m\s+([A-Z][a-zA-Z'-]{1,40})\b", content)
+                    if m:
+                        last_name = m.group(1)
+                if pid:
+                    last_id = pid
+        if last_id or last_name:
+            entry["last_speaker_id"] = last_id
+            entry["last_speaker_name"] = last_name
 
 
 @app.post("/tavus/callback")
@@ -242,7 +490,17 @@ async def tavus_callback(request: Request, background: BackgroundTasks):
     try:
         # Persist every payload for debugging/traceability
         _persist_webhook_payload(payload)
+        # Update in-memory roster from this real-time payload
+        try:
+            _update_roster_from_payload(payload)
+        except Exception:
+            pass
         tool_calls = _extract_tool_calls_from_payload(payload)
+        # If a recording URL is present, upload it in background
+        rec_url = _maybe_get_recording_url(payload)
+        if rec_url:
+            conv = str(payload.get("conversation_id") or "unknown")
+            background.add_task(_upload_recording_to_s3, conv, rec_url)
         if tool_calls:
             for call in tool_calls:
                 evt = TavusEvent.model_validate({
@@ -260,6 +518,52 @@ async def tavus_callback(request: Request, background: BackgroundTasks):
         print(f"[Webhook] Error parsing payload: {e}")
 
     return {"ok": True}
+
+
+@app.post("/admin/upload_recording")
+async def admin_upload_recording(request: Request):
+    """Manual trigger to upload a recording URL to S3.
+    Body: { conversation_id: str, url: str }
+    """
+    verify_secret(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    conv_id = str((body or {}).get("conversation_id") or "").strip()
+    url = str((body or {}).get("url") or "").strip()
+    if not conv_id or not url:
+        raise HTTPException(status_code=400, detail="conversation_id and url are required")
+    out = _upload_recording_to_s3(conv_id, url)
+    if not out:
+        raise HTTPException(status_code=500, detail="Upload failed (see server logs)")
+    return {"ok": True, "location": out}
+
+
+@app.post("/roster/register")
+async def roster_register(request: Request):
+    """Register or update a participant's display name for a conversation.
+    Body: { conversation_id: str, display_name: str, participant_id?: str, active?: bool }
+    """
+    verify_secret(request)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+    conv_id = str((body or {}).get("conversation_id") or "").strip()
+    name = str((body or {}).get("display_name") or "").strip()
+    pid = str((body or {}).get("participant_id") or "").strip()
+    active = bool((body or {}).get("active") or False)
+    if not conv_id or not name:
+        raise HTTPException(status_code=400, detail="conversation_id and display_name are required")
+    entry = ROSTER.setdefault(conv_id, {"participants": {}, "last_speaker_id": None, "last_speaker_name": None})
+    # Use participant_id if provided, else fall back to name as a synthetic key
+    key = pid if pid else f"name:{name.lower()}"
+    entry["participants"][key] = name
+    if active:
+        entry["last_speaker_id"] = key
+        entry["last_speaker_name"] = name
+    return {"ok": True, "conversation_id": conv_id, "participant_id": key, "display_name": name, "active": active}
 
 
 @app.get("/healthz")

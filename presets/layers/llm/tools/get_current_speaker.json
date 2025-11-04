@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+        "name": "get_current_speaker",
+        "description": "Returns the current human speaker's id and display name based on real-time transcript metadata or roster memory.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }
+    }
+}

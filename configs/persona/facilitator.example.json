@@ -6,7 +6,7 @@
     "default_replica_id": "r4317e64d25a",
     "llm": "tavus_llama",
     "tts": "cartesia_sonic",
-    "stt": "",
+    "stt": "names_meeting",
     "perception": "basic",
     "objectives_id": "",
     "guardrails_id": "",
@@ -14,6 +14,9 @@
         "summarize_discussion",
         "take_meeting_notes",
         "cluster_ideas",
-        "print_message"
+        "print_message",
+        "get_speaker_name",
+        "get_current_speaker",
+        "get_roster"
     ]
 }

@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+        "name": "get_roster",
+        "description": "Returns a list of participants (id and display_name) known in the current conversation.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }
+    }
+}

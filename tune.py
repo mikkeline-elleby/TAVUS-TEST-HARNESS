@@ -118,6 +118,15 @@ def _resolve_persona_id_by_name(name: str) -> Optional[str]:
         items = data
     else:
         return None
+    target = name.strip().lower()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        pname = str(it.get("persona_name") or it.get("name") or "").strip().lower()
+        pid = it.get("persona_id") or it.get("id")
+        if pname == target and isinstance(pid, str) and pid:
+            return pid
+    return None
 
 def _resolve_persona_id_from_logs(name: Optional[str] = None) -> Optional[str]:
     """Scan logs for latest persona create/update response.json and return persona_id.
@@ -432,9 +441,16 @@ def cmd_conversation(args: argparse.Namespace) -> int:
         if not p.exists():
             sys.exit(f"properties file not found: {p}")
         try:
-            payload["properties"] = json.loads(p.read_text())
+            props = json.loads(p.read_text())
         except Exception as e:
             sys.exit(f"properties file is not valid JSON: {e}")
+        # Accept either a plain properties object or an object with top-level "properties"
+        if isinstance(props, dict) and "properties" in props and isinstance(props.get("properties"), dict) and (len(props.keys()) == 1 or (len(props.keys()) == 2 and "comment" in props)):
+            payload["properties"] = props["properties"]
+        else:
+            if not isinstance(props, dict):
+                sys.exit("properties file must be a JSON object (either the properties object or { \"properties\": { ... } })")
+            payload["properties"] = props
 
     if args.print_payload:
         print(json.dumps(payload, indent=2))

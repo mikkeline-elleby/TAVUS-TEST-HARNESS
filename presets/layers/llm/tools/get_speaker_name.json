@@ -1,0 +1,12 @@
+{
+    "type": "function",
+    "function": {
+        "name": "get_speaker_name",
+        "description": "Returns the current speaker's display name if available in the transcript metadata.",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+        }
+    }
+}

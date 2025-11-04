@@ -1,0 +1,6 @@
+{
+    "enable_recording": true,
+    "aws_assume_role_arn": "arn:aws:iam::268922422948:role/CVIRecordingRole",
+    "recording_s3_bucket_region": "eu-north-1",
+    "recording_s3_bucket_name": "tavus-recording"
+}
