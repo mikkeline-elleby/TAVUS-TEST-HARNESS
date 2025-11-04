@@ -68,6 +68,8 @@ What it does:
 - Writes `WEBHOOK_URL` to `.env`
 - Creates a test conversation and prints the `conversation_url`
 
+Note: the STT hotwords help recognize and address participants by name. If you need alternate spellings or nicknames for “Mikkeline” or “Akila”, we can add them to the hotwords list in `presets/layers/stt/names_meeting.demo.json` (and/or your active STT preset).
+
 ## Recording to S3
 
 There are two ways to get recordings into your S3 bucket. Use native Tavus recording when possible; use the webhook fallback if you can't or don't want to change IAM right now.
