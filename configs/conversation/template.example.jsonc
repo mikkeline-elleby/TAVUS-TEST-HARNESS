@@ -22,12 +22,10 @@
     "document_tags": [], // real document tags used by your documents
     "document_retrieval_strategy": "balanced", // speed | quality | balanced
     "memory_stores": [],
-    "test_mode": true, // set false to run a live session
-
+    "test_mode": false, // set true only when validating configuration
     // Optional: direct webhook URL for callbacks (omit this field if you don't actually have a URL).
     // TIP: the CLI also reads WEBHOOK_URL from .env as a fallback.
     "callback_url": "",
-
     // Recording options (choose one of the following approaches):
     // 1) Shortcut: set enable_recording = true to auto-inject default role/region/bucket used by this harness.
     "enable_recording": false,
@@ -38,8 +36,22 @@
     //   "recording_s3_bucket_region": "eu-north-1",
     //   "recording_s3_bucket_name": "your-bucket"
     // },
-
     // If neither enable_recording nor properties are set, no native S3 recording will be used.
-    // Freeform object for other advanced/experimental settings if needed:
-    "properties": {}
+    // Freeform object for other advanced/operational settings (and optional recording/details):
+    // Common optional keys:
+    //   max_call_duration (seconds)          : hard cap on call length
+    //   participant_left_timeout (seconds)   : end call after last participant leaves
+    //   participant_absent_timeout (seconds) : end if participant never joins
+    //   language                             : e.g. 'english', 'multilingual'
+    //   enable_closed_captions (bool)        : request captions
+    //   apply_greenscreen (bool)             : apply background effect
+    "properties": {
+        "enable_recording": false,
+        "max_call_duration": 1800,
+        "participant_left_timeout": 60,
+        "participant_absent_timeout": 120,
+        "language": "multilingual",
+        "enable_closed_captions": false,
+        "apply_greenscreen": false
+    }
 }
