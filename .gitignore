@@ -1,6 +1,9 @@
 __pycache__/
 *.pyc
 .env
+*.env
+*.env.*
+*.bak
 logs/
 .DS_Store
 # Python venv
