@@ -31,6 +31,11 @@ Optional (callback + security):
 - `WEBHOOK_URL` – populated automatically by `bin/set_webhook_url.sh` or `bin/quickstart.sh`.
 - `WEBHOOK_SHARED_SECRET` – if set, callbacks must include `x-webhook-secret` (or `x-tavus-secret`).
 
+CLI defaults (to reduce flags):
+- `TUNE_DEFAULT_TEST_MODE` – `true|false` default for conversations when not set in config/flags.
+- `TUNE_AUTO_RECORDING` – `true|false` auto-enable native S3 recording (uses built-in role/region/bucket) unless config disables.
+- `TUNE_VERBOSE` – when set (any value), print request payloads without needing `--print-payload`.
+
 Replica convenience:
 - `TAVUS_REPLICA_ID` – default replica if you don’t pass `--replica-id`.
 
@@ -102,6 +107,13 @@ Shortcut all-in-one (webhook + tunnel + test conversation):
 ```bash
 bin/quickstart.sh -- --test-mode
 ```
+
+### Defaults to reduce flags
+- Conversation name: if missing, derived from the config filename (e.g., `team_kickoff.json` → "Team Kickoff").
+- Callback URL: omitted in config; falls back to `WEBHOOK_URL` from `.env`.
+- Test mode: if not specified in config/flags, uses `TUNE_DEFAULT_TEST_MODE` from `.env`.
+- Recording: `enable_recording: true` in config or `TUNE_AUTO_RECORDING=true` in `.env` injects default S3 recording properties. Use a `properties` block to override.
+- Verbose: set `TUNE_VERBOSE=1` to print payloads; otherwise output stays concise.
 
 ## 3. Native Recording IAM Summary
 Role trust: AWS Account `291871421005` with ExternalId `tavus`. Policy needs S3 write perms to your bucket. Put role ARN, region, bucket name in `.env` for Mode B/C.

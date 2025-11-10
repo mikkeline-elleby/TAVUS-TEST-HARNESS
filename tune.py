@@ -400,18 +400,26 @@ def cmd_conversation(args: argparse.Namespace) -> int:
         payload["replica_id"] = pick_replica(None)
 
     name = args.name or cfg.get("name") or cfg.get("conversation_name")
+    # (3) Auto derive name from config filename if still missing
+    if not name and getattr(args, "config", None):
+        stem = pathlib.Path(args.config).stem
+        # strip generic prefixes/suffixes
+        cleaned = re.sub(r"[_\-.]+", " ", stem).strip()
+        name = cleaned.title()
     if name:
         payload["conversation_name"] = name
     # Prefer explicit --context, else config conversational_context, else meeting helpers
     cc = args.context or cfg.get("conversational_context") or _build_conversational_context(args)
     if cc:
         payload["conversational_context"] = cc
-    if args.callback_url:
-        payload["callback_url"] = args.callback_url
-    elif cfg.get("callback_url"):
-        payload["callback_url"] = cfg.get("callback_url")
+    # (6) Callback URL implicit: only set if non-empty value from explicit flag or config, else take WEBHOOK_URL env.
+    cb_flag = (args.callback_url or "").strip()
+    cb_cfg = str(cfg.get("callback_url") or "").strip()
+    if cb_flag:
+        payload["callback_url"] = cb_flag
+    elif cb_cfg:
+        payload["callback_url"] = cb_cfg
     elif WEBHOOK_URL:
-        # Fallback to environment-provided webhook URL if neither flag nor config sets it
         payload["callback_url"] = WEBHOOK_URL
     if args.custom_greeting:
         payload["custom_greeting"] = args.custom_greeting
@@ -421,12 +429,17 @@ def cmd_conversation(args: argparse.Namespace) -> int:
         payload["audio_only"] = True
     elif isinstance(cfg.get("audio_only"), bool):
         payload["audio_only"] = cfg.get("audio_only")
+    # (4) Test mode fallback hierarchy: flags > config > env default
     if args.test_mode:
         payload["test_mode"] = True
     elif getattr(args, "disable_test_mode", False):
         payload["test_mode"] = False
     elif isinstance(cfg.get("test_mode"), bool):
         payload["test_mode"] = cfg.get("test_mode")
+    else:
+        env_default_tm = os.getenv("TUNE_DEFAULT_TEST_MODE")
+        if env_default_tm is not None:
+            payload["test_mode"] = env_default_tm.lower() in ("1", "true", "yes", "on")
     if args.document_retrieval_strategy:
         payload["document_retrieval_strategy"] = args.document_retrieval_strategy
     elif cfg.get("document_retrieval_strategy"):
@@ -484,18 +497,19 @@ def cmd_conversation(args: argparse.Namespace) -> int:
             "recording_s3_bucket_region": region,
             "recording_s3_bucket_name": bucket,
         }
-    elif bool(cfg.get("enable_recording") or cfg.get("recording")):
-        # Convenience: if the conversation config has a top-level enable_recording flag,
-        # auto-inject standard S3 properties using hard-coded defaults.
-        # This path is skipped if a properties_file is provided or env flag is used above.
-        payload["properties"] = {
-            "enable_recording": True,
-            "aws_assume_role_arn": DEFAULT_RECORDING_ROLE_ARN,
-            "recording_s3_bucket_region": DEFAULT_RECORDING_REGION,
-            "recording_s3_bucket_name": DEFAULT_RECORDING_BUCKET,
-        }
+    else:
+        # (5) Auto recording: config shortcut OR env TUNE_AUTO_RECORDING
+        auto_record_cfg = bool(cfg.get("enable_recording") or cfg.get("recording"))
+        auto_record_env = os.getenv("TUNE_AUTO_RECORDING", "").lower() in ("1", "true", "yes", "on")
+        if auto_record_cfg or (auto_record_env and not cfg.get("disable_recording")):
+            payload["properties"] = {
+                "enable_recording": True,
+                "aws_assume_role_arn": DEFAULT_RECORDING_ROLE_ARN,
+                "recording_s3_bucket_region": DEFAULT_RECORDING_REGION,
+                "recording_s3_bucket_name": DEFAULT_RECORDING_BUCKET,
+            }
 
-    if args.print_payload:
+    if args.print_payload or os.getenv("TUNE_VERBOSE"):
         print(json.dumps(payload, indent=2))
     if args.dry_run:
         return 0
