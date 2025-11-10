@@ -19,7 +19,7 @@
     // Outcomes tracking
     "objectives_id": "",
     // Policy/guardrails
-    "guardrails_id": "",
+    "guardrails_id": ""
     // Modular layers example:
     // layers_dir defaults to "presets/layers", so you can omit it:
     // "llm": "tavus_llama",
