@@ -1,8 +1,16 @@
 {
     "persona_id": "pd5b6a2c7642",
+    "replica_id": "",
     "conversation_name": "Team Kickoff",
     "conversational_context": "You are TeamWise, a facilitator. Greet everyone, set a clear 30-minute agenda, invite each participant to share one goal, cluster overlapping ideas, and end with 1-2 action items.",
+    "custom_greeting": "Welcome everyone! Let's align on goals and keep it collaborative.",
     "audio_only": false,
+    "document_ids": [],
+    "document_tags": [],
     "document_retrieval_strategy": "balanced",
-    "test_mode": false
+    "memory_stores": [],
+    "test_mode": false,
+    "callback_url": "",
+    "enable_recording": false,
+    "properties": {}
 }

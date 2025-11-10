@@ -10,5 +10,7 @@
     "document_retrieval_strategy": "balanced",
     "memory_stores": [],
     "test_mode": true,
+    "callback_url": "",
+    "enable_recording": false,
     "properties": {}
 }

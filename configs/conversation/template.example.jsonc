@@ -1,5 +1,5 @@
 // Conversation template (JSON with comments). Copy to a .json file when ready to run.
-// Provide either persona_id (preferred) or replica_id. If both are blank, the tool will auto-pick a completed replica.
+// Provide either persona_id (preferred) or replica_id. If both are blank, the CLI auto-picks a completed replica.
 {
     // Identity: choose ONE (persona preferred)
     "persona_id": "",
@@ -23,5 +23,23 @@
     "document_retrieval_strategy": "balanced", // speed | quality | balanced
     "memory_stores": [],
     "test_mode": true, // set false to run a live session
-    "properties": {} // freeform object for advanced settings
+
+    // Optional: direct webhook URL for callbacks (omit this field if you don't actually have a URL).
+    // TIP: the CLI also reads WEBHOOK_URL from .env as a fallback.
+    "callback_url": "",
+
+    // Recording options (choose one of the following approaches):
+    // 1) Shortcut: set enable_recording = true to auto-inject default role/region/bucket used by this harness.
+    "enable_recording": false,
+    // 2) Full control via properties (if you prefer explicit configuration or your defaults differ):
+    // "properties": {
+    //   "enable_recording": true,
+    //   "aws_assume_role_arn": "arn:aws:iam::<your-account-id>:role/<role-name>",
+    //   "recording_s3_bucket_region": "eu-north-1",
+    //   "recording_s3_bucket_name": "your-bucket"
+    // },
+
+    // If neither enable_recording nor properties are set, no native S3 recording will be used.
+    // Freeform object for other advanced/experimental settings if needed:
+    "properties": {}
 }
