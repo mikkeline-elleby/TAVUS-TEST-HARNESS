@@ -12,5 +12,13 @@
     "test_mode": false,
     "callback_url": "",
     "enable_recording": false,
-    "properties": {}
+    "properties": {
+        "enable_recording": true,
+        "max_call_duration": 1800,
+        "participant_left_timeout": 60,
+        "participant_absent_timeout": 120,
+        "language": "multilingual",
+        "enable_closed_captions": false,
+        "apply_greenscreen": false
+    }
 }

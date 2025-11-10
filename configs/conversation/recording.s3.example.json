@@ -1,6 +1,0 @@
-{
-    "enable_recording": true,
-    "aws_assume_role_arn": "arn:aws:iam::<your-account-id>:role/<role-name-for-tavus>",
-    "recording_s3_bucket_region": "eu-west-1",
-    "recording_s3_bucket_name": "your-bucket-name"
-}

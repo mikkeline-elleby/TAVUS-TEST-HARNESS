@@ -505,6 +505,9 @@ def cmd_conversation(args: argparse.Namespace) -> int:
             if not isinstance(props, dict):
                 sys.exit("properties file must be a JSON object (either the properties object or { \"properties\": { ... } })")
             payload["properties"] = props
+    elif isinstance(cfg.get("properties"), dict):
+        # Accept inline properties from config directly
+        payload["properties"] = cfg["properties"]
     elif getattr(args, "use_s3_recording_from_env", False):
         # Build properties from environment variables for native Tavus S3 recording
         props = _build_s3_recording_properties_from_env(exit_on_missing=True)
@@ -593,6 +596,186 @@ def main():
     pc.add_argument("--topic", help="Primary discussion topic")
     pc.add_argument("--comment", help="Host comment/constraints")
     pc.set_defaults(func=cmd_conversation)
+
+    # Scenario subcommand: single JSON with { "persona": {..}, "conversation": {..} }
+    sc = sp.add_parser("scenario", help="Create/update persona then create conversation from one JSON file")
+    sc.add_argument("--config", required=True, help="Path to scenario JSON/JSONC: { persona: {...}, conversation: {...} }")
+    sc.add_argument("--print-payload", action="store_true", help="Print combined persona & conversation payloads")
+    sc.add_argument("--dry-run", action="store_true", help="Skip API calls (show resolution only)")
+    def cmd_scenario(args: argparse.Namespace) -> int:
+        cfg_path = pathlib.Path(args.config)
+        if not cfg_path.exists():
+            sys.exit(f"Scenario config not found: {cfg_path}")
+        try:
+            root = _load_json_config(cfg_path)
+        except Exception as e:
+            sys.exit(f"Scenario config invalid: {e}")
+        if not isinstance(root, dict):
+            sys.exit("Scenario config must be a JSON object with persona and conversation keys")
+        persona_cfg = root.get("persona") or {}
+        conv_cfg = root.get("conversation") or {}
+        if not isinstance(persona_cfg, dict) or not isinstance(conv_cfg, dict):
+            sys.exit("persona and conversation must be JSON objects")
+        # Implicit persona create/update by name + optional persona_id
+        persona_name = persona_cfg.get("persona_name")
+        persona_id = persona_cfg.get("persona_id")
+        update_mode = bool(persona_cfg.get("update") or persona_cfg.get("force_update"))
+        # Auto detect update if persona_id present or persona_name matches existing
+        if not update_mode and not persona_id and persona_name:
+            resolved = _resolve_persona_id_by_name(persona_name)
+            if not resolved:
+                resolved = _resolve_persona_id_from_logs(persona_name)
+            if resolved:
+                persona_id = resolved
+                update_mode = True
+        # Build persona payload using existing builder logic reusing cmd_persona pieces lightly
+        # Instead of duplicating fully, reconstruct minimal fields
+        p_payload = {
+            k: v for k, v in persona_cfg.items() if k in (
+                "persona_name", "system_prompt", "pipeline_mode", "context", "default_replica_id",
+                "document_ids", "document_tags", "objectives_id", "guardrails_id"
+            ) and v not in (None, "")
+        }
+        # Layers provided inline or via modular keys
+        layers = persona_cfg.get("layers")
+        # Modular fragments
+        layers_dir = pathlib.Path(persona_cfg.get("layers_dir") or (pathlib.Path(__file__).parent / "presets" / "layers"))
+        def resolve_fragment(kind: str, value: Optional[str]) -> Optional[pathlib.Path]:
+            if not value: return None
+            cand = pathlib.Path(value)
+            if cand.exists(): return cand
+            p = layers_dir / kind / (value if value.endswith('.json') else f"{value}.json")
+            return p if p.exists() else None
+        llm_path = resolve_fragment("llm", persona_cfg.get("llm"))
+        tts_path = resolve_fragment("tts", persona_cfg.get("tts"))
+        stt_path = resolve_fragment("stt", persona_cfg.get("stt"))
+        perc_path = resolve_fragment("perception", persona_cfg.get("perception"))
+        if layers:
+            if not isinstance(layers, dict):
+                sys.exit("persona.layers must be a JSON object")
+        else:
+            layers = {}
+        if llm_path:
+            frag = _load_layer_fragment(llm_path)
+            layers["llm"] = _merge_llm(layers.get("llm"), frag)
+        if tts_path:
+            layers["tts"] = _load_layer_fragment(tts_path)
+        if stt_path:
+            stt_frag = _load_layer_fragment(stt_path)
+            hw = stt_frag.get("hotwords")
+            if isinstance(hw, list):
+                stt_frag["hotwords"] = ", ".join([str(x).strip() for x in hw if str(x).strip()])
+            layers["stt"] = stt_frag
+        if perc_path:
+            layers["perception"] = _load_layer_fragment(perc_path)
+        # Tools merging
+        tools_list = []
+        tnames = []
+        if isinstance(persona_cfg.get("tools"), list):
+            tnames = [str(x).strip() for x in persona_cfg["tools"] if str(x).strip()]
+        if tnames:
+            default_tools_dir = pathlib.Path(__file__).parent / "presets" / "layers" / "llm" / "tools"
+            for name in tnames:
+                candidate = pathlib.Path(name)
+                if candidate.exists():
+                    tool_path = candidate
+                else:
+                    tool_path = default_tools_dir / (name if name.endswith('.json') else f"{name}.json")
+                if not tool_path.exists():
+                    sys.exit(f"tool not found: {tool_path}")
+                tools_list.extend(_load_tool_file(tool_path))
+        if tools_list:
+            llm_layer = layers.get("llm") or {}
+            existing_tools = llm_layer.get("tools") or []
+            llm_layer["tools"] = existing_tools + tools_list
+            layers["llm"] = llm_layer
+        if layers:
+            p_payload["layers"] = layers
+        # Validate persona create/update minimal requirements
+        if update_mode:
+            if not persona_id:
+                sys.exit("Scenario: resolved update mode but no persona_id found")
+        else:
+            if not p_payload.get("persona_name"):
+                sys.exit("Scenario: persona_name required for create")
+            if (p_payload.get("pipeline_mode","full") == "full") and not p_payload.get("system_prompt"):
+                sys.exit("Scenario: system_prompt required for pipeline_mode=full")
+        # If dry-run or print, output payloads
+        # Create/update persona unless dry-run
+        created_persona_id = persona_id
+        if args.print_payload:
+            print("Persona payload:")
+            print(json.dumps(p_payload, indent=2))
+        if not args.dry_run:
+            if update_mode:
+                url = f"{PERSONA_ENDPOINT}/{persona_id}"
+                ops = []
+                for k,v in p_payload.items():
+                    ops.append({"op":"replace","path":f"/{k}","value":v})
+                h = dict(H); h["Content-Type"] = "application/json-patch+json"
+                r = requests.patch(url, headers=h, json=ops, timeout=90)
+                print("\nPersona status:", r.status_code)
+                try: print(json.dumps(r.json(), indent=2))
+                except Exception: print(r.text)
+                save_log("persona_update", p_payload, r, url)
+                if r.status_code >= 400: return 1
+                created_persona_id = persona_id
+            else:
+                r = requests.post(PERSONA_ENDPOINT, headers=H, json=p_payload, timeout=90)
+                print("\nPersona status:", r.status_code)
+                try: print(json.dumps(r.json(), indent=2))
+                except Exception: print(r.text)
+                save_log("persona_create", p_payload, r, PERSONA_ENDPOINT)
+                if r.status_code >= 400: return 1
+                try:
+                    created_persona_id = r.json().get("persona_id") or r.json().get("id")
+                except Exception:
+                    created_persona_id = None
+        # Build conversation payload using existing logic with inline config conv_cfg
+        # Inject persona_id if not already set
+        if created_persona_id and not conv_cfg.get("persona_id"):
+            conv_cfg["persona_id"] = created_persona_id
+        # When scenario provides persona_name only, attempt resolution
+        if not conv_cfg.get("persona_id") and conv_cfg.get("persona_name"):
+            resolved = _resolve_persona_id_by_name(conv_cfg["persona_name"]) or _resolve_persona_id_from_logs(conv_cfg["persona_name"])
+            if resolved:
+                conv_cfg["persona_id"] = resolved
+        # Conversation payload assembly similar to cmd_conversation but only config-driven
+        c_payload = {}
+        for k in ["persona_id","replica_id","conversation_name","name","conversational_context","callback_url",
+                  "custom_greeting","audio_only","test_mode","document_retrieval_strategy","properties"]:
+            v = conv_cfg.get(k)
+            if v not in (None, ""):
+                # unify name field
+                if k == "name":
+                    c_payload["conversation_name"] = v
+                else:
+                    c_payload[k if k != "conversational_context" else "conversational_context"] = v
+        # Arrays
+        for k in ["document_ids","document_tags","memory_stores"]:
+            v = conv_cfg.get(k)
+            if isinstance(v, list) and v:
+                c_payload[k] = v
+        # Auto name derive if missing
+        if not c_payload.get("conversation_name"):
+            stem = cfg_path.stem
+            cleaned = re.sub(r"[_\-.]+", " ", stem).strip().title()
+            c_payload["conversation_name"] = cleaned
+        # Callback from env if absent
+        if not c_payload.get("callback_url") and WEBHOOK_URL:
+            c_payload["callback_url"] = WEBHOOK_URL
+        if args.print_payload:
+            print("\nConversation payload:")
+            print(json.dumps(c_payload, indent=2))
+        if args.dry_run:
+            return 0
+        r = requests.post(CONVERSATION_ENDPOINT, headers=H, json=c_payload, timeout=90)
+        print("\nConversation status:", r.status_code)
+        try: print(json.dumps(r.json(), indent=2))
+        except Exception: print(r.text)
+        save_log("conversation_create", c_payload, r, CONVERSATION_ENDPOINT)
+        return 0 if r.status_code < 400 else 1
+    sc.set_defaults(func=cmd_scenario)
 
     args = ap.parse_args()
     try:
