@@ -1,0 +1,15 @@
+{
+    "persona_id": "p4d1697b9eb5",
+    "replica_id": "",
+    "conversation_name": "My Conversation",
+    "conversational_context": "Set the scene here: who is the user, what is the objective, and any constraints.",
+    "custom_greeting": "",
+    "audio_only": true,
+    "document_ids": [],
+    "document_tags": [],
+    "document_retrieval_strategy": "balanced",
+    "memory_stores": [],
+    "test_mode": false,
+    "properties": {
+    }
+}

@@ -1,0 +1,10 @@
+{
+    "perception_model": "raven-0",
+    "ambient_awareness_queries": [
+        "What is the emotional state of the user?"
+    ],
+    "perception_analysis_queries": [
+        "Did the user smile at any point during the interaction?",
+        "Did the user frown at any point during the interaction?"
+    ]
+}

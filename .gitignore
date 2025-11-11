@@ -5,6 +5,7 @@ __pycache__/
 *.env.*
 *.bak
 logs/
+webhook/
 .DS_Store
 # Python venv
 .venv/

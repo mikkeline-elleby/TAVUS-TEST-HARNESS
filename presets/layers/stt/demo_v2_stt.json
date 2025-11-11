@@ -1,0 +1,6 @@
+{
+    "participant_pause_sensitivity": "high",
+    "participant_interrupt_sensitivity": "high",
+    "hotwords": "Mikkeline, Akhila, Tavus",
+    "smart_turn_detection": true
+}

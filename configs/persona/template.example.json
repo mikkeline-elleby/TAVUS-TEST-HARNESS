@@ -10,6 +10,6 @@
     "perception": "basic",
     "document_ids": [],
     "document_tags": [],
-    "objectives_id": "",
-    "guardrails_id": ""
+    "objectives_name": "",
+    "guardrails_name": ""
 }

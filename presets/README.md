@@ -1,117 +1,118 @@
-# Presets (Layers & Tools)
+# Presets
 
-<<<<<<< HEAD
-Minimal reference for what you can plug into personas via config or CLI flags.
+This folder collects reusable building blocks for personas and conversations. It includes:
+- Objectives presets (`presets/objectives/*.json`)
+- Guardrails presets (`presets/guardrails/*.json`)
+- Layer fragments (`presets/layers/**` for llm/tts/stt/perception)
+- Tool definitions (`presets/tools/*.json`)
 
-## Structure
-- `layers/llm/*.json` – LLM model fragments (e.g., `tavus_llama_4.json`).
-- `layers/tts/*.json` – Text-to-speech engine configs (Cartesia Sonic variants).
-- `layers/stt/*.json` – Speech-to-text and turn detection behavior.
-- `layers/perception/*.json` – Perception model selection (`basic`, `raven_0`, `off`).
-- `layers/llm/tools/*.json` – Function tools the LLM can call.
+The workflow is config-first: define presets once, sync policies to Tavus, and then reference them by name in your persona configs. No CLI flags are required.
 
-## Referencing Layers
-In a persona config:
-```jsonc
-{
-	"llm": "tavus_llama_4",
-	"tts": "cartesia_sonic.teamwise",
-	"stt": "teamwise.demo",
-	"perception": "basic"
-}
-```
-The harness resolves each name to `presets/layers/<kind>/<name>.json`.
+## Objectives
 
-## Common Fields
-LLM fragment:
-```json
-{ "model": "tavus-llama-4" }
-```
-TTS fragment (Cartesia Sonic):
-```json
-{
-	"tts_engine": "cartesia",
-	"external_voice_id": "UUID-here",
-	"voice_settings": { "speed": "normal", "emotion": ["positivity:high", "curiosity"] },
-	"tts_model_name": "sonic"
-}
-```
-STT fragment:
-```json
-{
-	"stt_engine": "tavus-advanced",
-	"participant_pause_sensitivity": "high",
-	"participant_interrupt_sensitivity": "high",
-	"smart_turn_detection": true,
-	"hotwords": "Mikkeline, Akila, TeamWise"
-}
-```
-Perception fragment:
-```json
-{ "perception_model": "basic" }
-```
+- Create JSON files under `presets/objectives/` with a top-level "name" and optional helper fields. Example templates are provided.
+- Upsert them to Tavus via:
 
-## Tools Examples
-Attach tools by listing their names in the persona `tools` array:
-```json
-{
-	"tools": [
-		"summarize_discussion",
-		"take_meeting_notes",
-		"cluster_ideas",
-		"get_speaker_name",
-		"get_current_speaker",
-		"get_roster"
-	]
-}
-```
-Each tool JSON defines:
-```json
-{
-	"type": "function",
-	"function": {
-		"name": "take_meeting_notes",
-		"description": "Captures and organizes key discussion points into structured notes.",
-		"parameters": { "type": "object", "properties": { "content": { "type": "string" } }, "required": ["content"] }
-	}
-}
-```
-
-## Adding New Presets
-1. Drop a new JSON file under the appropriate `layers/<kind>/` directory.
-2. Reference its file stem (without `.json`) in the persona config.
-3. (Optional) Combine multiple fragments via CLI flags `--llm/--tts/--stt/--perception`.
-
-## Validation
-Use dry-run to inspect final payload:
 ```bash
-bin/tune.sh persona --config configs/persona/facilitator.example.json --print-payload --dry-run
+python bin/sync_policies.py
 ```
 
-## Tips
-- Keep hotwords a single comma-separated string (schema expects a string).
-- Merge tool lists by naming them; the harness appends them.
-- If a layer needs credentials (e.g., TTS external voice id), include only the non-secret reference here; put secrets in `.env` when possible.
+- In persona configs, prefer referencing by name using `objectives_name`:
 
----
-This is the single presets reference; all other per-layer READMEs were removed for simplicity.
-=======
-Reusable building blocks you can include by name in persona configs or via CLI flags.
+```json
+{
+  "objectives_name": "facilitator_core"
+}
+```
 
-- layers/ — Modular fragments for `llm`, `tts`, `stt`, and `perception` (used with `--layers-dir` and `--llm/--tts/--stt/--perception`).
-- tools/ — Function tool definitions (used with `--tools-dir` and `--tools`).
-- objectives/ — Named Objectives presets you create in Tavus and then reference by name (resolved to IDs).
-- guardrails/ — Named Guardrails presets you create in Tavus and then reference by name (resolved to IDs).
+IDs are still supported for advanced cases, but names are the default path.
 
-Usage tips:
-- Start from the `template.example.jsonc` in each folder.
-- Create the Objective/Guardrail in Tavus with the same `name`.
-- Attach to a persona using either names (auto-resolved):
-	- `--objectives-name "Facilitator Core Objective"`
-	- `--guardrails-name "Facilitator Safety Policy"`
-	or explicit IDs:
-	- `--objectives-id ob_...`
-	- `--guardrails-id gr_...`
+## Guardrails
 
-See subfolder READMEs for details and examples.
->>>>>>> origin/feat/objectives-guardrails
+- Create JSON files under `presets/guardrails/` with a top-level "name". Example templates are provided.
+- Upsert them with the same sync step above.
+- In persona configs, reference by name using `guardrails_name`:
+
+```json
+{
+  "guardrails_name": "facilitator_safety"
+}
+```
+
+## LLM layer fragments
+
+Layer fragments describe how the language model behaves and what function tools it can call. Place them in `presets/layers/llm/`.
+
+Common fields:
+- model: LLM model id (e.g., "tavus-llama").
+- tools: Array of function-calling tool definitions.
+
+Tool object shape (summary):
+- type: "function"
+- function.name: Stable function identifier
+- function.description: What the function does
+- function.parameters: JSON Schema describing inputs
+
+Example:
+```json
+{
+  "model": "tavus-llama",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "summarize_discussion",
+        "description": "Summarizes the current discussion into bullet points.",
+        "parameters": {
+          "type": "object",
+          "properties": { "transcript": { "type": "string" } },
+          "required": ["transcript"]
+        }
+      }
+    }
+  ]
+}
+```
+
+Model variants provided out-of-the-box (choose by setting the `llm` field in your persona config):
+- `tavus_llama` → `model: "tavus-llama"`
+- `tavus_llama_4` → `model: "tavus-llama-4"`
+- `tavus_gpt_4o` → `model: "tavus-gpt-4o"`
+- `tavus_gpt_4o_mini` → `model: "tavus-gpt-4o-mini"`
+
+## Perception layer fragments
+
+Perception fragments live in `presets/layers/perception/` and enable optional visual/ambient capabilities.
+
+Common fields:
+- perception_model: one of `raven-0` (recommended), `basic`, or `off`.
+- ambient_awareness_queries: array of short passive checks.
+- perception_analysis_queries: array of deeper checks.
+- perception_tools and perception_tool_prompt: function tools and guidance specific to perception.
+
+Templates: see `template.example.json` and `template.example.jsonc` for ready-to-copy fragments.
+
+Docs: https://docs.tavus.io/sections/conversational-video-interface/persona/perception
+
+## STT layer fragments
+
+Configure how speech is captured and turns are detected. Place files in `presets/layers/stt/`.
+
+Common fields:
+- stt_engine: e.g., `tavus-advanced`.
+- participant_pause_sensitivity / participant_interrupt_sensitivity: `low` | `medium` | `high`.
+- hotwords: optional hints to bias recognition.
+- smart_turn_detection (+ optional params).
+
+## TTS layer fragments
+
+Configure how the agent speaks. Place files in `presets/layers/tts/`.
+
+Common fields:
+- tts_engine, tts_model_name
+- voice_settings (e.g., speed, emotion)
+- tts_emotion_control
+
+## Tools
+
+Function-calling tool definitions live in `presets/tools/`. Each file can contain a single tool, an array of tools, or an object with a top-level `tools` array. Reference them from your persona’s LLM layer by including them in the `tools` array (inline or by copying the definitions into your layer).

@@ -330,7 +330,8 @@ def cmd_persona(args: argparse.Namespace) -> int:
     tools_names = tools_from_flags or tools_from_cfg
     if tools_names:
         # Prefer colocated tools under LLM layer
-        default_tools_dir = pathlib.Path(__file__).parent / "presets" / "layers" / "llm" / "tools"
+        # Updated default tools directory after relocation from presets/layers/llm/tools to presets/tools
+        default_tools_dir = pathlib.Path(__file__).parent / "presets" / "tools"
         configured_tools_dir = getattr(args, "tools_dir", None) or cfg.get("tools_dir")
         tools_dir = pathlib.Path(configured_tools_dir) if configured_tools_dir else default_tools_dir
         merged_tools: List[dict] = []
@@ -584,8 +585,8 @@ def main():
     pp.add_argument("--tts", help="TTS layer by name or file (resolved under layers-dir/tts)")
     pp.add_argument("--stt", help="STT layer by name or file (resolved under layers-dir/stt)")
     pp.add_argument("--perception", help="Perception layer by name or file (resolved under layers-dir/perception)")
-    pp.add_argument("--tools", help="Comma-separated tool names or JSON files (resolved under presets/layers/llm/tools by default)")
-    pp.add_argument("--tools-dir", help="Directory where tool JSON files live (default: presets/layers/llm/tools)")
+    pp.add_argument("--tools", help="Comma-separated tool names or JSON files (resolved under presets/tools by default)")
+    pp.add_argument("--tools-dir", help="Directory where tool JSON files live (default: presets/tools)")
     pp.add_argument("--objectives-id", dest="objectives_id", help="Attach Objectives by ID (created in Tavus dashboard)")
     pp.add_argument("--guardrails-id", dest="guardrails_id", help="Attach Guardrails by ID (created in Tavus dashboard)")
     pp.add_argument("--objectives-name", dest="objectives_name", help="Resolve and attach Objectives by NAME (looks up via API)")
@@ -703,7 +704,8 @@ def main():
         if isinstance(persona_cfg.get("tools"), list):
             tnames = [str(x).strip() for x in persona_cfg["tools"] if str(x).strip()]
         if tnames:
-            default_tools_dir = pathlib.Path(__file__).parent / "presets" / "layers" / "llm" / "tools"
+            # Updated default tools directory (was presets/layers/llm/tools)
+            default_tools_dir = pathlib.Path(__file__).parent / "presets" / "tools"
             for name in tnames:
                 candidate = pathlib.Path(name)
                 if candidate.exists():

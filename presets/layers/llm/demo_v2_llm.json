@@ -1,0 +1,4 @@
+{
+    "model": "tavus-llama-4",
+    "speculative_inference": true
+}

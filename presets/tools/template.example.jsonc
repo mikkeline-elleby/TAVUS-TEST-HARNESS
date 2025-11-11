@@ -1,0 +1,20 @@
+{
+    // Example tool template in JSONC format for comments
+    "type": "function",
+    "function": {
+        "name": "example_tool",
+        "description": "An example placeholder tool definition with comments; copy and modify for new tools.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sample": {
+                    "type": "string",
+                    "description": "Sample input string to demonstrate parameter structure."
+                }
+            },
+            "required": [
+                "sample"
+            ]
+        }
+    }
+}

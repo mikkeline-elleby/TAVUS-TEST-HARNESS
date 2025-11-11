@@ -15,11 +15,11 @@
     // Knowledge: per-persona documents (requires real IDs/tags from your Tavus account)
     "document_ids": [],
     "document_tags": [],
-    // Optional governance: create these in Tavus dashboard and paste IDs here
-    // Outcomes tracking
-    "objectives_id": "",
-    // Policy/guardrails
-    "guardrails_id": ""
+    // Optional governance: prefer attaching by NAME (the CLI will resolve IDs via API)
+    // Outcomes tracking (name from your Tavus account, e.g., "Facilitator Objectives")
+    "objectives_name": "",
+    // Policy/guardrails (name from your Tavus account, e.g., "Facilitator Guardrails")
+    "guardrails_name": ""
     // Modular layers example:
     // layers_dir defaults to "presets/layers", so you can omit it:
     // "llm": "tavus_llama",

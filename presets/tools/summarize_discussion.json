@@ -1,0 +1,22 @@
+{
+    "type": "function",
+    "function": {
+        "name": "summarize_discussion",
+        "description": "Summarize the current discussion with key points and optional tone or audience adjustments.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "instructions": {
+                    "type": "string",
+                    "description": "Guidance for how to summarize (e.g., target audience, tone, length)."
+                },
+                "max_bullets": {
+                    "type": "integer",
+                    "description": "Maximum number of bullets to include in the summary.",
+                    "minimum": 1,
+                    "default": 5
+                }
+            }
+        }
+    }
+}

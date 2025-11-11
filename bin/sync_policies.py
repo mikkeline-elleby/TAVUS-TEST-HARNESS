@@ -93,16 +93,50 @@ def _create(url: str, doc: Dict[str, Any], dry_run: bool, verbose: bool) -> Opti
 
 
 def _update(url: str, rid: str, doc: Dict[str, Any], dry_run: bool, verbose: bool) -> None:
+    """Attempt to update an existing resource with multiple strategies:
+    1) PATCH with JSON Patch operations (application/json-patch+json)
+    2) PATCH with application/json body
+    3) Fallback to create-new if server doesn't support update (405/404)
+    """
     target = f"{url}/{rid}"
     if dry_run:
-        print(f"[dry-run] PUT {target} name='{doc.get('name')}'")
+        print(f"[dry-run] PATCH {target} name='{doc.get('name')}'")
         return
-    r = requests.put(target, headers={**H, "Content-Type": "application/json"}, json=doc, timeout=60)
+
+    # Strategy 1: JSON Patch (replace fields)
+    ops = []
+    for k, v in doc.items():
+        ops.append({"op": "replace", "path": f"/{k}", "value": v})
+    r = requests.patch(
+        target,
+        headers={**H, "Content-Type": "application/json-patch+json"},
+        json=ops,
+        timeout=60,
+    )
     if verbose:
-        print("Response:", r.status_code, r.text[:400])
-    if r.status_code not in (200, 204):
-        raise SystemExit(f"Update failed: {r.status_code} {r.text}")
-    print(f"Updated: {doc.get('name')} ({rid})")
+        print("[update] PATCH json-patch ->", r.status_code, r.text[:400])
+    if r.status_code in (200, 204, 304):  # 304 = Not Modified (treat as success)
+        msg = "Updated" if r.status_code != 304 else "No changes"
+        print(f"{msg}: {doc.get('name')} ({rid})")
+        return
+
+    # Strategy 2: PATCH with JSON body
+    r2 = requests.patch(target, headers={**H, "Content-Type": "application/json"}, json=doc, timeout=60)
+    if verbose:
+        print("[update] PATCH json ->", r2.status_code, r2.text[:400])
+    if r2.status_code in (200, 204, 304):  # 304 = Not Modified (treat as success)
+        msg = "Updated" if r2.status_code != 304 else "No changes"
+        print(f"{msg}: {doc.get('name')} ({rid})")
+        return
+
+    # Strategy 3: Fallback to create a new resource if update is not allowed
+    if r.status_code in (404, 405) or r2.status_code in (404, 405):
+        print(f"Update not allowed (status {r.status_code}/{r2.status_code}). Creating a new resource instead...")
+        _create(url, doc, dry_run, verbose)
+        return
+
+    # If all strategies fail, raise
+    raise SystemExit(f"Update failed: PATCH:{r.status_code} {r.text} | JSON-PATCH:{r2.status_code} {r2.text}")
 
 
 def _slugify(s: str) -> str:

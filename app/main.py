@@ -331,11 +331,13 @@ def _extract_tool_calls_from_payload(payload: Dict[str, Any]) -> List[ToolCall]:
 def _persist_webhook_payload(payload: Dict[str, Any]) -> None:
     """Append the raw payload to a JSONL file and, if present, append
     transcript lines to a plain text file per conversation.
-    Files are created under logs/webhook/<conversation_id>/.
+    Files are created under <root>/webhook/<conversation_id>/ by default.
+    Override with env WEBHOOK_OUT_DIR to point elsewhere.
     """
     try:
         conv_id = str(payload.get("conversation_id") or "unknown")
-        base = Path("logs") / "webhook" / conv_id
+        out_root = os.getenv("WEBHOOK_OUT_DIR") or "webhook"
+        base = Path(out_root) / conv_id
         base.mkdir(parents=True, exist_ok=True)
         # Save raw JSON event as JSONL
         (base / "events.jsonl").open("a", encoding="utf-8").write(json.dumps(payload, ensure_ascii=False) + "\n")

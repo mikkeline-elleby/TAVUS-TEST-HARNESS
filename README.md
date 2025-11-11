@@ -1,8 +1,8 @@
 # Tavus Test Harness
 
-Kickstart personas and conversations against the Tavus API with the smallest setup possible.
+Minimal harness for creating personas and conversations against the Tavus API using config files plus a small helper script set.
 
-## 1) Install
+## 1) Setup
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -10,62 +10,57 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Open `.env` and set your API key:
+Populate `TAVUS_API_KEY` in `.env`.
 
-```
-TAVUS_API_KEY=your_api_key_here
-```
+## 2) Sync policies & run a sample
 
-Optional convenience (skip if unsure):
-
-```
-# Webhook URL (used as default callback_url if set)
-WEBHOOK_URL=https://<your-tunnel>/tavus/callback
-
-# Defaults to reduce flags
-TUNE_AUTO_RECORDING=false  # set true to auto-enable S3 recording defaults
-```
-
-## 2) Run a quick test
-
-Create or update policies (objectives + guardrails) from presets, then create the example persona and a conversation:
+Upsert objectives and guardrails defined under `presets/` then create the sample persona and a conversation:
 
 ```bash
 source .venv/bin/activate
-python bin/sync_policies.py      # one-time: creates/updates preset objectives & guardrails
+python bin/sync_policies.py
 bin/tune.sh persona --config configs/persona/facilitator.example.json
 bin/tune.sh conversation --config configs/conversation/facilitator_kickoff.json
 ```
 
-Tip: conversation name is derived from the file name if omitted; `callback_url` falls back to `WEBHOOK_URL`.
+Persona config uses `objectives_name` and `guardrails_name`; IDs are resolved automatically.
 
-## 3) Optional: live webhook + tunnel
+## 3) Webhook (optional)
 
-If you run a webhook receiver locally on port 8000, expose it and set `WEBHOOK_URL`:
+To receive live events:
 
+Terminal A:
 ```bash
-ngrok http 8000
-export WEBHOOK_URL="https://<your-ngrok>.ngrok-free.app/tavus/callback"
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Then create a conversation:
-
+Terminal B (tunnel + persist):
 ```bash
-source .venv/bin/activate
+ngrok http 8000
+bin/set_webhook_url.sh "https://<your-ngrok>.ngrok-free.app/tavus/callback"
+```
+
+Terminal C (create conversation):
+```bash
 bin/tune.sh conversation --config configs/conversation/facilitator_kickoff.json
 ```
 
-## 4) Optional: recording made easy
+`bin/set_webhook_url.sh` writes `WEBHOOK_URL` into `.env`. Run it after the tunnel is up.
 
-Add this to a conversation config to enable recording with project defaults:
+## 4) Utilities
 
-```json
-{
-  "enable_recording": true
-}
+```bash
+bin/demo.sh            # quick end‑to‑end demo
+bin/clean_logs.sh      # prune old logs (keeps 7 days by default)
 ```
 
-Or set `TUNE_AUTO_RECORDING=true` in `.env` to enable it automatically.
+Webhook payloads are stored under `webhook/` (ignored by git). API request/response logs live under `logs/` categorized into subfolders.
 
----
-That’s it. For presets and tools, see `presets/README.md`. For examples, check `configs/persona/` and `configs/conversation/`.
+## 5) Editing flow recap
+1. Adjust presets (objectives, guardrails, layers, tools).
+2. `python bin/sync_policies.py` to upsert changes.
+3. Update persona config, then run persona & conversation commands.
+
+See `presets/README.md` and `configs/README.md` for detailed schema guidance.
+
+

@@ -24,7 +24,20 @@ def now_slug():
     return time.strftime("%Y%m%d-%H%M%S")
 
 def save_log(action: str, payload: Dict[str, Any], response: requests.Response, endpoint: str) -> pathlib.Path:
-    run_dir = pathlib.Path("logs") / f"{now_slug()}_{action}"
+    """Persist API request/response for debugging.
+    Creates a dated folder under logs/<category>/<timestamp>_<action>/ where category is derived from action.
+    Categories:
+      persona_create, persona_update -> personas/
+      conversation_create -> conversations/
+      other -> misc/
+    """
+    category = "misc"
+    if action.startswith("persona_"):
+        category = "personas"
+    elif action.startswith("conversation_"):
+        category = "conversations"
+    base = pathlib.Path("logs") / category
+    run_dir = base / f"{now_slug()}_{action}"
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / "payload.json").write_text(json.dumps(payload, indent=2))
     try:

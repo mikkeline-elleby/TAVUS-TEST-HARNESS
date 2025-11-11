@@ -1,0 +1,29 @@
+{
+    "type": "function",
+    "function": {
+        "name": "take_meeting_notes",
+        "description": "Generate structured meeting notes from the current meeting transcript and context.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "context": {
+                    "type": "string",
+                    "description": "Any context about the meeting such as date, participants, goals, and decisions already made."
+                },
+                "format": {
+                    "type": "string",
+                    "description": "Requested output format. Default is markdown with headings.",
+                    "enum": [
+                        "markdown",
+                        "json",
+                        "plaintext"
+                    ],
+                    "default": "markdown"
+                }
+            },
+            "required": [
+                "context"
+            ]
+        }
+    }
+}

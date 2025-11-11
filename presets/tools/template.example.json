@@ -1,0 +1,19 @@
+{
+    "type": "function",
+    "function": {
+        "name": "example_tool",
+        "description": "An example placeholder tool definition; copy and modify for new tools.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "sample": {
+                    "type": "string",
+                    "description": "Sample input string to demonstrate parameter structure."
+                }
+            },
+            "required": [
+                "sample"
+            ]
+        }
+    }
+}
