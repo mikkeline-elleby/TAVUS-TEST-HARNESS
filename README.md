@@ -52,9 +52,11 @@ bin/tune.sh conversation --config configs/conversation/facilitator_kickoff.json
 ```bash
 bin/demo.sh            # quick end‑to‑end demo
 bin/clean_logs.sh      # prune old logs (keeps 7 days by default)
+python bin/documents.py create --url https://example.com/document.pdf --name "Important" --tag meeting --prop department sales
+python bin/documents.py list
 ```
 
-Webhook payloads are stored under `webhook/` (ignored by git). API request/response logs live under `logs/` categorized into subfolders.
+Webhook payloads and API request/response logs are stored under `logs/` (`logs/personas`, `logs/conversations`, `logs/webhook`).
 
 ## 5) Editing flow recap
 1. Adjust presets (objectives, guardrails, layers, tools).
@@ -62,5 +64,67 @@ Webhook payloads are stored under `webhook/` (ignored by git). API request/respo
 3. Update persona config, then run persona & conversation commands.
 
 See `presets/README.md` and `configs/README.md` for detailed schema guidance.
+
+## 6) Repo map (what lives where)
+
+This is a quick guide to the important folders/files and what they do. Focus on what you’ll edit and what calls Tavus.
+
+```
+.
+├─ README.md                         # This guide
+├─ requirements.txt                  # Python deps
+├─ .env(.example)                    # TAVUS_API_KEY (+ optional WEBHOOK_URL)
+├─ tune.py                           # Core CLI (persona / conversation create)
+├─ util.py                           # Shared helpers: auth, HTTP, name→ID resolution, logging
+├─ app/                              # FastAPI webhook server (persists events under logs/webhook)
+│
+├─ bin/                              # Helper scripts
+│  ├─ tune.sh                        # Wrapper for tune.py
+│  ├─ demo.sh                        # Quick end‑to‑end sample flow
+│  ├─ clean_logs.sh                  # Prune old logs
+│  ├─ set_webhook_url.sh             # Writes WEBHOOK_URL into .env
+│  ├─ sync_policies.py               # Upsert objectives & guardrails from presets/
+│  ├─ documents.py                   # Ad‑hoc create/list documents
+│  └─ sync_documents.py              # Upsert documents from presets/documents/
+│
+├─ configs/                          # Config‑first inputs you run
+│  ├─ persona/
+│  └─ conversation/
+│
+├─ presets/                          # Reusable building blocks synced to Tavus
+│  ├─ objectives/                    # Persona objectives (sync_policies)
+│  ├─ guardrails/                    # Persona guardrails (sync_policies)
+│  ├─ tools/                         # LLM tool specs (referenced by LLM presets)
+│  ├─ documents/                     # Document presets (sync_documents)
+│  │  └─ attention_is_all_you_need.json
+│  └─ layers/                        # Model/audio/perception presets
+│     ├─ llm/                        # LLM configs referencing tools
+│     ├─ tts/                        # Text‑to‑speech presets
+│     ├─ stt/                        # Speech‑to‑text presets
+│     └─ perception/                 # Perception presets
+│
+├─ logs/                             # All runtime logs (gitignored)
+│  ├─ personas/                      # Persona create/update (payload/response/meta)
+│  ├─ conversations/                 # Conversation create calls
+│  └─ webhook/                       # Incoming webhook event payloads
+│
+└─ __pycache__/ / .venv / etc.       # Local environment / Python caches
+```
+
+
+### Key entrypoints hitting Tavus API
+- `tune.py` (or `bin/tune.sh`): persona + conversation creation
+- `bin/sync_policies.py`: upsert objectives & guardrails
+- `bin/sync_documents.py`: upsert documents (name→ID resolution, property sanitization)
+- `bin/documents.py`: ad‑hoc document create/list
+
+### Typical flows
+- Edit a persona config → `bin/tune.sh persona --config configs/persona/your.json`
+- Edit a conversation config → `bin/tune.sh conversation --config configs/conversation/your.json`
+- Add/update objectives or guardrails → edit under `presets/` then `python bin/sync_policies.py`
+- Add/update documents → place JSON in `presets/documents/` then `python bin/sync_documents.py`
+- Webhooks → run `uvicorn app.main:app`, expose via ngrok, then `bin/set_webhook_url.sh <public-url>`
+
+If you’d like more examples (e.g., composing multiple documents or layering tools), open an issue or drop a comment.
 
 
