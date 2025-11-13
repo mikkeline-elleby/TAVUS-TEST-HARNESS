@@ -1,7 +1,7 @@
 {
     "stt_engine": "tavus-advanced",
-    "participant_pause_sensitivity": "high",
+    "participant_pause_sensitivity": "medium",
     "participant_interrupt_sensitivity": "high",
     "smart_turn_detection": true,
-    "hotwords": "You are TeamWise, a meeting facilitator., Mikkeline, Akila, Julen"
+    "hotwords": "You are TeamWise, a meeting facilitator, Mikkeline, Akhila, Julen, Lahari"
 }
