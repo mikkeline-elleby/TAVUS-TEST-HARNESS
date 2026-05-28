@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Echo Dialogue Board</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: rgba(16, 24, 47, 0.82);
+      --panel-2: rgba(12, 18, 35, 0.92);
+      --line: rgba(156, 170, 214, 0.18);
+      --text: #f4f7ff;
+      --muted: #98a7cf;
+      --accent: #7ee0d1;
+      --accent-2: #f8bb6c;
+      --danger: #ff6b7a;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(circle at top left, rgba(126, 224, 209, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(248, 187, 108, 0.16), transparent 24%),
+        linear-gradient(180deg, #0a0f1f 0%, #0d1326 42%, #070b16 100%);
+      color: var(--text);
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    }
+
+    body {
+      padding: 28px;
+    }
+
+    .shell {
+      max-width: 1240px;
+      margin: 0 auto;
+      display: grid;
+      gap: 20px;
+    }
+
+    .hero {
+      padding: 28px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(18, 27, 53, 0.92), rgba(10, 15, 31, 0.92));
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -40px -90px auto;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(126, 224, 209, 0.20), transparent 70%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(34px, 4vw, 58px);
+      line-height: 0.96;
+      letter-spacing: -0.04em;
+    }
+
+    .subtitle {
+      margin: 14px 0 0;
+      color: var(--muted);
+      max-width: 900px;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 0.95fr) minmax(0, 1.1fr);
+      gap: 12px;
+      margin-top: 22px;
+      align-items: start;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .field input, .field textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(6, 10, 22, 0.75);
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+      transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 92px;
+      line-height: 1.5;
+    }
+
+    .field.textarea-field {
+      grid-column: span 1;
+    }
+
+    .field input:focus, .field textarea:focus {
+      border-color: rgba(126, 224, 209, 0.65);
+      transform: translateY(-1px);
+    }
+
+    .field-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .row-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+      align-items: center;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 15px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #b9ffe4);
+      color: #061018;
+      font-weight: 700;
+      box-shadow: 0 10px 24px rgba(126, 224, 209, 0.18);
+    }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .btn-danger {
+      background: rgba(255, 107, 122, 0.16);
+      color: #ffd6da;
+      border: 1px solid rgba(255, 107, 122, 0.22);
+    }
+
+    .status {
+      margin-left: auto;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .conditions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.03);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .panel-title {
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .scenes {
+      display: grid;
+      gap: 14px;
+    }
+
+    .scene {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(10, 15, 31, 0.88), rgba(8, 12, 24, 0.94));
+      padding: 16px;
+    }
+
+    .scene.active {
+      border-color: rgba(126, 224, 209, 0.6);
+      box-shadow: inset 0 0 0 1px rgba(126, 224, 209, 0.15);
+    }
+
+    .scene-head {
+      display: flex;
+      gap: 14px;
+      justify-content: space-between;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+
+    .scene h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .scene p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .scene-meta {
+      color: var(--accent-2);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      white-space: nowrap;
+    }
+
+    .lines {
+      display: grid;
+      gap: 10px;
+    }
+
+    .line {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .line strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 13px;
+      color: #dce5ff;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .line span {
+      display: block;
+      color: var(--text);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+
+    .line button {
+      align-self: center;
+      white-space: nowrap;
+    }
+
+    .hidden { display: none !important; }
+
+    @media (max-width: 1080px) {
+      .conditions {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .status {
+        margin-left: 0;
+      }
+
+      .line {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="eyebrow">Daily echo launcher</div>
+      <h1>Dialogue board for persona echoes</h1>
+      <p class="subtitle">
+        Send each line individually against the local Flask relay.
+        The page posts to <strong>/send_text_message</strong> with the conversation id parsed from your Daily URL.
+      </p>
+
+      <div class="toolbar">
+        <div class="field">
+          <label for="conversation-url">Conversation URL or id</label>
+          <input id="conversation-url" placeholder="https://your-room.daily.co/abc123 or abc123" />
+        </div>
+        <div class="field">
+          <label for="backend-url">Backend URL</label>
+          <input id="backend-url" value="http://localhost:8000" />
+        </div>
+        <div class="field textarea-field">
+          <label for="custom-text">Custom text</label>
+          <textarea id="custom-text" placeholder="Type a custom message to echo..."></textarea>
+          <div class="field-actions">
+            <button id="send-custom" class="btn-primary">Send custom text</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-actions">
+        <div id="status" class="status">Ready</div>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div class="conditions" id="condition-grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const scenes = [
+      {
+        id: "condition_a",
+        title: "Condition A",
+        summary: "The AI is present but mostly stays out of the way.",
+        category: "Minimal facilitation",
+        lines: [
+          { label: "Intro", text: "Hi, I'm TeamWise, an AI discussion facilitator. In this activity, your task is to collaborate and come up with an answer to the following scenario: You crash-land in a hot desert. It's mid-morning, the temperature will rise to ~45°C. You are ~100 km from the nearest settlement. You have salvaged the following items. Pick the four most important items: A book called \"Edible Animals of the Desert\"; A bottle of 1,000 salt tablets; A compress kit with gauze; A cosmetic mirror; A flashlight (four-battery size); A loaded .45-caliber pistol; A magnetic compass; A parachute (red and white); A plastic raincoat (large size); A sectional air map made of plastic; One jackknife; One pair of sunglasses per person; One quart of water per person; One topcoat per person; Two quarts of 180-proof vodka." },
+          { label: "Background", text: "I will mostly stay in the background while you talk. I may provide brief procedural reminders if needed, but I will not give answers or evaluate your choices. Please focus on discussing with each other and try to reach a shared decision as a group. You can begin when you are ready." },
+          { label: "Time reminder", text: "You have 10 minutes left." },
+          { label: "Time reminder", text: "You have 5 minutes left." },
+          { label: "Time reminder", text: "You have 2 minutes left." },
+          { label: "FAQ", text: "Yes — discuss and reselect within the time limit." },
+          { label: "FAQ", text: "Agree on the four items and announce them when ready." },
+          { label: "Conclusion", text: "Thanks everyone! Great work staying focused. You may now exit the conversation." },
+        ],
+      },
+      {
+        id: "condition_b",
+        title: "Condition B",
+        summary: "The AI is socially present and lightly helpful, but does not take over.",
+        category: "Light facilitation",
+        lines: [
+          { label: "Intro", text: "Hi, I’m TeamWise, an AI discussion facilitator. In this activity, your task is to collaborate and come up with an answer to the following scenario: You crash-land in a hot desert. It's mid-morning, the temperature will rise to ~45°C. You are ~100 km from the nearest settlement. You have salvaged the following items. Pick the four most important items: A book called \"Edible Animals of the Desert\"; A bottle of 1,000 salt tablets; A compress kit with gauze; A cosmetic mirror; A flashlight (four-battery size); A loaded .45-caliber pistol; A magnetic compass; A parachute (red and white); A plastic raincoat (large size); A sectional air map made of plastic; One jackknife; One pair of sunglasses per person; One quart of water per person; One topcoat per person; Two quarts of 180-proof vodka." },
+          { label: "Background", text: "I will stay mostly in the background, but I may occasionally help keep the discussion moving. For example, I may invite you to consider another perspective, help clarify where the group is stuck, or remind you when it is time to move toward a decision. I will not give answers or evaluate your choices. Please focus on discussing with each other and try to reach a shared decision as a group. You can begin when you are ready." },
+          { label: "Silence", text: "Would it help to hear one quick idea from someone who hasn’t spoken yet?" },
+          { label: "Transition", text: "Let’s move to the next phase — decide on your top candidate items and justify briefly." },
+          { label: "Disagreement", text: "It sounds like there are two competing priorities — could you name them and compare trade-offs?" },
+          { label: "Disagreement", text: "It sounds like there are two priorities here. Could you compare what matters most?" },
+          { label: "Participation imbalance", text: "I notice some voices have been quiet. Would someone who hasn't spoken like to add one point?" },
+          { label: "Backchannel", text: "I see." },
+          { label: "Backchannel", text: "That's a useful consideration." },
+          { label: "Light facilitation", text: "Maybe it would be useful to hear another perspective before deciding." },
+          { label: "Conclusion", text: "Thanks everyone! Great work staying focused. You may now exit the conversation." },
+          { label: "Time reminder", text: "You have 10 minutes left." },
+          { label: "Time reminder", text: "You have 5 minutes left." },
+          { label: "Time reminder", text: "You have 2 minutes left." },
+        ],
+      },
+    ];
+
+    const conditionGrid = document.getElementById("condition-grid");
+    const conversationInput = document.getElementById("conversation-url");
+    const backendInput = document.getElementById("backend-url");
+    const customTextInput = document.getElementById("custom-text");
+    const sendCustomBtn = document.getElementById("send-custom");
+    const statusEl = document.getElementById("status");
+
+    let selectedSceneId = scenes[0].id;
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function parseConversationId(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      if (!raw.includes("://")) return raw.replace(/^\/+|\/+$/g, "");
+      try {
+        const url = new URL(raw);
+        const parts = url.pathname.split("/").filter(Boolean);
+        return parts[0] || "";
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function getBackendUrl() {
+      return String(backendInput.value || "http://localhost:8000").replace(/\/$/, "");
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    function makeInferenceId(prefix) {
+      return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    }
+
+    function getSelectedScene() {
+      return scenes.find((scene) => scene.id === selectedSceneId) || scenes[0];
+    }
+
+    function renderSceneList() {
+      conditionGrid.innerHTML = "";
+      scenes.forEach((scene) => {
+        const sceneEl = document.createElement("section");
+        sceneEl.className = "panel scene";
+        sceneEl.dataset.sceneId = scene.id;
+
+        const head = document.createElement("div");
+        head.className = "panel-header scene-head";
+        head.innerHTML = `
+          <div>
+            <div class="panel-title">${scene.category}</div>
+            <h2>${scene.title}</h2>
+            <p>${scene.summary}</p>
+          </div>
+          <div class="scene-meta">${scene.category}</div>
+        `;
+
+        head.addEventListener("click", () => selectScene(scene.id));
+
+        const lines = document.createElement("div");
+        lines.className = "panel-body lines";
+
+        scene.lines.forEach((line, index) => {
+          const lineEl = document.createElement("div");
+          lineEl.className = "line";
+          lineEl.innerHTML = `
+            <div>
+              <strong>${line.label} ${index + 1}</strong>
+              <span>${line.text}</span>
+            </div>
+          `;
+
+          const button = document.createElement("button");
+          button.className = "btn-ghost";
+          button.textContent = "Echo line";
+          button.addEventListener("click", () => sendLine(scene, line));
+
+          lineEl.appendChild(button);
+          lines.appendChild(lineEl);
+        });
+
+        sceneEl.appendChild(head);
+        sceneEl.appendChild(lines);
+        conditionGrid.appendChild(sceneEl);
+      });
+      updateSceneHighlights();
+    }
+
+    function updateSceneHighlights() {
+      document.querySelectorAll(".scene").forEach((node) => {
+        node.classList.toggle("active", node.dataset.sceneId === selectedSceneId);
+      });
+    }
+
+    function selectScene(sceneId) {
+      selectedSceneId = sceneId;
+      const scene = getSelectedScene();
+      updateSceneHighlights();
+      setStatus(`Selected scene: ${scene.title}`);
+    }
+
+    async function postEcho(text) {
+      const conversationId = parseConversationId(conversationInput.value);
+      if (!conversationId) {
+        throw new Error("Enter a conversation URL or id first.");
+      }
+
+      let response;
+      try {
+        response = await fetch(`${getBackendUrl()}/send_text_message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            properties: {
+              modality: "text",
+              text,
+              done: true,
+              inference_id: makeInferenceId("echo"),
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`POST /send_text_message failed (${response.status}): ${body}`);
+        }
+      } catch (error) {
+        if (error instanceof TypeError) {
+          throw new Error("Network error: could not reach backend. Check Backend URL and relay server.");
+        }
+        throw error;
+      } finally {
+      }
+
+      return response;
+    }
+
+    async function sendLine(scene, line) {
+      setStatus(`Sending: ${line.text.slice(0, 60)}`);
+      try {
+        await postEcho(line.text);
+        setStatus(`Sent line from ${scene.title}`);
+      } catch (error) {
+        setStatus(error.message);
+      }
+    }
+
+    sendCustomBtn.addEventListener("click", async () => {
+      const text = (customTextInput.value || "").trim();
+      if (!text) {
+        setStatus("Type a custom message first");
+        return;
+      }
+      try {
+        setStatus("Sending custom text");
+        await postEcho(text);
+        setStatus("Custom text sent");
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
+
+    customTextInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        sendCustomBtn.click();
+      }
+    });
+
+    renderSceneList();
+    selectScene(selectedSceneId);
+  </script>
+</body>
+</html>
