@@ -311,6 +311,73 @@
 
     .hidden { display: none !important; }
 
+    .row-actions input {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(6, 10, 22, 0.75);
+      color: var(--text);
+      padding: 10px 12px;
+      font: inherit;
+      outline: none;
+      max-width: 240px;
+    }
+
+    .part-table { display: grid; gap: 8px; }
+    #participation-body { display: grid; gap: 8px; }
+
+    .part-head, .part-row {
+      display: grid;
+      grid-template-columns: 1fr 96px 70px 72px;
+      gap: 10px;
+      align-items: center;
+      padding: 11px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .part-head {
+      background: transparent;
+      border: 0;
+      padding: 2px 14px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .part-row.active {
+      border-color: rgba(126, 224, 209, 0.65);
+      box-shadow: inset 0 0 0 1px rgba(126, 224, 209, 0.2);
+    }
+
+    .part-name { font-size: 15px; }
+
+    .part-time {
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .part-turns, .part-pct {
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+    }
+
+    .part-tag {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      border: 1px solid rgba(248, 187, 108, 0.4);
+      border-radius: 999px;
+      padding: 1px 7px;
+      margin-left: 6px;
+    }
+
+    .part-divider { height: 1px; background: var(--line); margin: 2px 0; }
+    .part-empty { color: var(--muted); font-size: 14px; padding: 8px 4px; line-height: 1.5; }
+
     @media (max-width: 1080px) {
       .conditions {
         grid-template-columns: 1fr;
@@ -329,6 +396,7 @@
       }
     }
   </style>
+  <script src="https://unpkg.com/@daily-co/daily-js"></script>
 </head>
 <body>
   <div class="shell">
@@ -359,11 +427,32 @@
       </div>
 
       <div class="row-actions">
+        <input id="observer-name" placeholder="Observer name (optional)" />
+        <button id="join-track" class="btn-primary">Join call to track speakers</button>
         <div id="status" class="status">Ready</div>
       </div>
     </section>
 
     <div class="layout">
+      <section class="panel participation">
+        <div class="panel-header">
+          <div class="panel-title">Participation — talk time &amp; turns</div>
+          <div class="row-actions" style="margin-top: 0">
+            <button id="reset-participation" class="btn-ghost">Reset</button>
+            <button id="export-participation" class="btn-ghost">Export JSON</button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="part-table">
+            <div class="part-head">
+              <div>Participant</div><div>Talk time</div><div>Turns</div><div>Share</div>
+            </div>
+            <div id="participation-body"></div>
+          </div>
+          <div id="audio-sink" style="display: none;"></div>
+        </div>
+      </section>
+
       <div class="conditions" id="condition-grid"></div>
     </div>
   </div>
@@ -582,6 +671,371 @@
         sendCustomBtn.click();
       }
     });
+
+    // ---------------------------------------------------------------
+    // Participation tracking: per-participant talk time + turn count.
+    // Time accrues only while a participant is *actually producing voice*
+    // (audio level above a threshold), driven by Daily's audio-level
+    // observer — NOT by "who was the last active speaker" (which sticks
+    // on the last talker during silence). The board joins as an observer
+    // (local mic/cam off) and subscribes to audio so it can meter levels.
+    // ---------------------------------------------------------------
+    const facilKeywords = ["assistant", "facilitator", "meeting facilitator", "teamwise"];
+
+    // Tunable: an audio level (0..1) at/above this counts as "speaking".
+    // Raise it if background noise inflates times; lower it if soft talkers
+    // are undercounted.
+    const SPEAK_THRESHOLD = 0.05;
+    const SILENCE_GAP_MS = 1200;   // silence this long ends a turn (so short pauses don't split one)
+    const LEVEL_INTERVAL_MS = 100; // audio-level sampling interval (Daily minimum)
+    const MAX_TICK_MS = 500;       // ignore accrual gaps larger than this (tab throttling guard)
+
+    function isFacilName(nm) {
+      return facilKeywords.some((k) => (nm || "").toLowerCase().includes(k));
+    }
+
+    function isReplica(p) {
+      return !!p && !p.local && isFacilName(p.user_name);
+    }
+
+    function participantName(p) {
+      return (
+        p.user_name ||
+        p.name ||
+        p.user_id ||
+        (p.session_id ? `user-${String(p.session_id).slice(-5)}` : "Unknown")
+      );
+    }
+
+    let callObject = null;
+    const participation = new Map(); // session_id -> { name, totalMs, turns, isAI, speaking, lastVoiceTs }
+    let lastLevelTs = 0;             // timestamp of previous audio-level sample (for accrual delta)
+    let tickTimer = null;
+    let lastTurnSpeaker = null;      // who last held the floor — a turn only counts on a change of speaker
+
+    const joinTrackBtn = document.getElementById("join-track");
+    const observerNameInput = document.getElementById("observer-name");
+    const participationBody = document.getElementById("participation-body");
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+      );
+    }
+
+    function fmtDuration(ms) {
+      const totalMs = Math.max(0, Math.round(ms));
+      const m = Math.floor(totalMs / 60000);
+      const s = Math.floor((totalMs % 60000) / 1000);
+      const millis = totalMs % 1000;
+      return `${m}:${String(s).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
+    }
+
+    // Create/refresh a row. Skips the local (observer) tab and silent helper
+    // bots that join without a display name (e.g. the Flask relay).
+    function ensureRow(p) {
+      if (!p || p.local) return null;
+      if (!isReplica(p) && !(p.user_name && p.user_name.trim())) return null;
+      let row = participation.get(p.session_id);
+      if (!row) {
+        row = { name: participantName(p), totalMs: 0, turns: 0, isAI: isReplica(p), speaking: false, lastVoiceTs: 0, lastLevel: 0 };
+        participation.set(p.session_id, row);
+      } else {
+        row.name = participantName(p);
+        row.isAI = isReplica(p);
+      }
+      return row;
+    }
+
+    function seedRows() {
+      if (!callObject) return;
+      Object.values(callObject.participants()).forEach((p) => {
+        ensureRow(p);
+        subscribeAudio(p);
+      });
+      attachAudio();
+      renderParticipation();
+    }
+
+    // Subscribe to audio only (no video) so the level observer has signal,
+    // without pulling video we never render.
+    function subscribeAudio(p) {
+      if (!callObject || !p || p.local) return;
+      try {
+        callObject.updateParticipant(p.session_id, {
+          setSubscribedTracks: { audio: true, video: false, screenVideo: false },
+        });
+      } catch (e) {}
+    }
+
+    function getAudioTrack(p) {
+      const t = p && p.tracks && p.tracks.audio;
+      return (t && t.state === "playable") ? t.persistentTrack : null;
+    }
+
+    // Attach each remote participant's audio to a hidden <audio> element. In
+    // headless (createCallObject) mode the browser only measures audio levels
+    // for tracks it actually decodes, so without this the level observer
+    // reports 0.00 for everyone even while they talk.
+    function attachAudio() {
+      if (!callObject) return;
+      const sink = document.getElementById("audio-sink");
+      if (!sink) return;
+      const present = new Set();
+      Object.values(callObject.participants()).forEach((p) => {
+        if (p.local) return;
+        const track = getAudioTrack(p);
+        let el = document.getElementById(`audio-${p.session_id}`);
+        if (track) {
+          present.add(p.session_id);
+          if (!el) {
+            el = document.createElement("audio");
+            el.id = `audio-${p.session_id}`;
+            el.autoplay = true;
+            el.playsInline = true;
+            sink.appendChild(el);
+          }
+          const stream = new MediaStream([track]);
+          if (!el.srcObject || el.srcObject.id !== stream.id) el.srcObject = stream;
+        } else if (el) {
+          el.srcObject = null;
+          el.remove();
+        }
+      });
+      Array.from(sink.children).forEach((el) => {
+        if (!present.has(el.id.replace("audio-", ""))) el.remove();
+      });
+    }
+
+    // Core: accrue time only for participants whose audio level is above the
+    // threshold on this sample, and count a new turn when they resume after
+    // a real silence gap.
+    // Create/find a row keyed by whatever id the audio-level map uses, resolving
+    // a display name from the participant object when one is available. Keying by
+    // the level map's own id means a mismatch with participants() can't cause
+    // time to be credited to nobody.
+    function ensureRowByKey(key, p) {
+      if (p && p.local) return null;
+      if (p && !isReplica(p) && !(p.user_name && p.user_name.trim())) return null;
+      let row = participation.get(key);
+      if (!row) {
+        row = {
+          name: p ? participantName(p) : `Speaker ${String(key).slice(-5)}`,
+          totalMs: 0, turns: 0, isAI: p ? isReplica(p) : false,
+          speaking: false, lastVoiceTs: 0, lastLevel: 0,
+        };
+        participation.set(key, row);
+      } else if (p) {
+        row.name = participantName(p);
+        row.isAI = isReplica(p);
+      }
+      return row;
+    }
+
+    function onAudioLevel(ev) {
+      const levels = (ev && ev.participantsAudioLevel) || {};
+      const now = Date.now();
+      let dt = lastLevelTs ? now - lastLevelTs : 0;
+      lastLevelTs = now;
+      if (dt > MAX_TICK_MS) dt = 0; // backgrounded? don't accrue the gap
+      const parts = callObject ? callObject.participants() : {};
+
+      // Accrue from the level map's OWN keys — the authoritative "who is making
+      // sound right now" — instead of looking levels up by our row keys.
+      for (const key in levels) {
+        const row = ensureRowByKey(key, parts[key]);
+        if (!row) continue;
+        const level = levels[key];
+        row.lastLevel = level;
+        if (level >= SPEAK_THRESHOLD) {
+          // start of a voiced segment (was silent longer than the gap)
+          if (!row.speaking && (now - (row.lastVoiceTs || 0)) > SILENCE_GAP_MS) {
+            // a new TURN only when the floor passes to a different speaker —
+            // the same speaker pausing and resuming stays one turn
+            if (key !== lastTurnSpeaker) {
+              row.turns += 1;
+              lastTurnSpeaker = key;
+            }
+          }
+          row.speaking = true;
+          row.lastVoiceTs = now;
+          if (dt) row.totalMs += dt; // only count time while actually voicing
+        } else if (row.speaking && (now - (row.lastVoiceTs || 0)) > SILENCE_GAP_MS) {
+          row.speaking = false;
+        }
+      }
+      // Rows absent from this sample are silent → decay their state.
+      for (const [key, row] of participation) {
+        if (!(key in levels)) {
+          row.lastLevel = 0;
+          if (row.speaking && (now - (row.lastVoiceTs || 0)) > SILENCE_GAP_MS) row.speaking = false;
+        }
+      }
+    }
+
+    function renderParticipation() {
+      if (!participationBody) return;
+      const now = Date.now();
+      const rows = [...participation.entries()].map(([id, r]) => ({
+        id,
+        name: r.name,
+        ms: r.totalMs,
+        turns: r.turns,
+        isAI: r.isAI,
+        // "active" = voiced within the silence gap
+        speaking: r.speaking && (now - (r.lastVoiceTs || 0)) <= SILENCE_GAP_MS,
+      }));
+
+      if (!rows.length) {
+        participationBody.innerHTML =
+          `<div class="part-empty">Join the call to start tracking. Talk time accrues only while a participant is actually speaking (mic active).</div>`;
+        return;
+      }
+
+      const humans = rows.filter((r) => !r.isAI).sort((a, b) => b.ms - a.ms);
+      const ai = rows.filter((r) => r.isAI).sort((a, b) => b.ms - a.ms);
+      const humanTotal = humans.reduce((sum, r) => sum + r.ms, 0) || 1;
+
+      const renderRow = (r) => {
+        const activeCls = r.speaking ? " active" : "";
+        const tag = r.isAI ? `<span class="part-tag">AI</span>` : "";
+        const pct = r.isAI ? "—" : `${Math.round((r.ms / humanTotal) * 100)}%`;
+        return `
+          <div class="part-row${activeCls}">
+            <div class="part-name">${escapeHtml(r.name)}${tag}</div>
+            <div class="part-time">${fmtDuration(r.ms)}</div>
+            <div class="part-turns">${r.turns}</div>
+            <div class="part-pct">${pct}</div>
+          </div>`;
+      };
+
+      participationBody.innerHTML =
+        humans.map(renderRow).join("") +
+        (ai.length ? `<div class="part-divider"></div>` + ai.map(renderRow).join("") : "");
+    }
+
+    function startTick() {
+      if (!tickTimer) tickTimer = setInterval(renderParticipation, 400);
+    }
+
+    function stopTick() {
+      if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    }
+
+    function resetTrackingUI() {
+      stopTick();
+      callObject = null;
+      lastLevelTs = 0;
+      const sink = document.getElementById("audio-sink");
+      if (sink) sink.innerHTML = "";
+      joinTrackBtn.textContent = "Join call to track speakers";
+      joinTrackBtn.classList.add("btn-primary");
+      joinTrackBtn.classList.remove("btn-danger");
+      joinTrackBtn.disabled = false;
+    }
+
+    async function joinForTracking() {
+      const raw = String(conversationInput.value || "").trim();
+      if (!raw.includes("://")) {
+        setStatus("Enter the full Daily conversation URL (https://…) to join and track speakers.");
+        return;
+      }
+      if (callObject) return;
+      participation.clear(); // fresh stats for this conversation — drop stale rows from prior joins
+      lastTurnSpeaker = null;
+      const name = (observerNameInput.value || "Researcher (observer)").trim();
+      joinTrackBtn.disabled = true;
+      setStatus("Joining call to track speakers…");
+      try {
+        callObject = window.DailyIframe.createCallObject({
+          startVideoOff: true,
+          startAudioOff: true,
+          // Subscribe automatically so audio always reaches the level meter;
+          // subscribeAudio() then drops the video we never render.
+          subscribeToTracksAutomatically: true,
+        });
+        callObject.on("participant-joined", (ev) => { ensureRow(ev?.participant); subscribeAudio(ev?.participant); attachAudio(); renderParticipation(); });
+        callObject.on("participant-updated", seedRows);
+        callObject.on("participant-left", () => { attachAudio(); renderParticipation(); });
+        callObject.on("track-started", attachAudio);
+        callObject.on("track-stopped", attachAudio);
+        callObject.on("remote-participants-audio-level", onAudioLevel);
+        callObject.on("left-meeting", resetTrackingUI);
+        await callObject.join({ url: raw, userName: name });
+        seedRows();
+        lastLevelTs = 0;
+        if (typeof callObject.startRemoteParticipantsAudioLevelObserver !== "function") {
+          setStatus("⚠ This daily-js build lacks startRemoteParticipantsAudioLevelObserver — level metering unavailable.");
+        } else {
+          try {
+            await callObject.startRemoteParticipantsAudioLevelObserver(LEVEL_INTERVAL_MS);
+          } catch (e) {
+            setStatus("⚠ Audio-level observer failed to start: " + (e?.message || e));
+          }
+        }
+        startTick();
+        joinTrackBtn.textContent = "Leave call";
+        joinTrackBtn.classList.remove("btn-primary");
+        joinTrackBtn.classList.add("btn-danger");
+        joinTrackBtn.disabled = false;
+        setStatus("Tracking speakers — time counts only while a mic is active.");
+      } catch (err) {
+        setStatus(`Could not join: ${err?.message || err}`);
+        if (callObject) { try { await callObject.destroy(); } catch (e) {} }
+        resetTrackingUI();
+      }
+    }
+
+    async function leaveTracking() {
+      const obj = callObject;
+      stopTick();
+      if (obj) {
+        try { obj.stopRemoteParticipantsAudioLevelObserver(); } catch (e) {}
+      }
+      resetTrackingUI();
+      if (obj) {
+        try { await obj.leave(); } catch (e) {}
+        try { await obj.destroy(); } catch (e) {}
+      }
+      renderParticipation();
+      setStatus("Left call. Totals frozen — use Reset to clear.");
+    }
+
+    function resetParticipation() {
+      participation.clear();
+      lastLevelTs = 0;
+      lastTurnSpeaker = null;
+      if (callObject) seedRows(); else renderParticipation();
+      setStatus("Participation stats reset.");
+    }
+
+    function exportParticipation() {
+      const data = {
+        conversation_id: parseConversationId(conversationInput.value) || null,
+        generated_at: new Date().toISOString(),
+        participants: [...participation.entries()].map(([id, r]) => ({
+          session_id: id,
+          name: r.name,
+          is_ai: r.isAI,
+          talk_ms: Math.round(r.totalMs),
+          talk_seconds: +(r.totalMs / 1000).toFixed(3),
+          turns: r.turns,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `participation-${data.conversation_id || "session"}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      setStatus("Exported participation JSON.");
+    }
+
+    joinTrackBtn.addEventListener("click", () => (callObject ? leaveTracking() : joinForTracking()));
+    document.getElementById("reset-participation").addEventListener("click", resetParticipation);
+    document.getElementById("export-participation").addEventListener("click", exportParticipation);
+    window.addEventListener("beforeunload", () => { if (callObject) callObject.leave(); });
+    renderParticipation();
 
     renderSceneList();
     selectScene(selectedSceneId);
